@@ -1,0 +1,15 @@
+{
+  "name": "indoor_reporting",
+  "version": "0.0.1",
+  "description": "Indoor reporting",
+  "main": "domi_cube_node.js",
+  "author": "Lahorde",
+  "license": "",
+  "readmeFilename": "README.md",
+  "dependencies": {
+    "sensortag" : "https://github.com/lahorde/node-sensortag.git", 
+    "influx":"*",
+    "async":"*",
+    "debug":"*"
+  }
+}
