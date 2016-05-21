@@ -1,0 +1,11 @@
+[Unit]
+Description=Grafana service
+Requires=network.target influxdb.service
+After=network.target influxdb.service                                    
+
+[Service]
+Environment=DEBUG=sensortag_report DB_USER=db_user_id DB_PASS=db_pass
+ExecStart=/usr/bin/node /opt/sensortag_report/sensortag_report.js 
+
+[Install]
+WantedBy=multi-user.target
