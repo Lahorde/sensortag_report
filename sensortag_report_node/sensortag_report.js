@@ -213,7 +213,7 @@ IndoorReport.prototype.onBatteryLevelChanged = function(sensorTag, level) {
 
 IndoorReport.prototype.toDb = function(sensorTag, fieldName, fieldValue)
 {
-  this._dbClient.writePoint(fieldName+ '_TI-ST_' + sensorTag.uuid, {time: new Date(), value: fieldValue}, null, function(err, response) { 
+  this._dbClient.writePoint(fieldName+ '_TI_ST_' + sensorTag.uuid, {time: new Date(), value: fieldValue}, null, function(err, response) { 
     if(err)
       {
         debug("Cannot write to db : " + err);
