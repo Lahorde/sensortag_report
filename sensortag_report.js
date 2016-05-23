@@ -29,9 +29,13 @@ else{
 
 function IndoorReport(callback)
 {
-  this._sensorTag = null;
+  this._sensorTags = {};
+  
+  this._bindings = {};
+  this._bindings.onSensorTagReporterAdded = this.onSensorTagReporterAdded.bind(this);
+  
   this._dbClient = influx({
-   
+  
     //single-host configuration 
     host : 'localhost',
     port : 8086, // optional, default 8086 
@@ -49,31 +53,41 @@ function IndoorReport(callback)
   } );  
 }
 
-IndoorReport.prototype.connectSensortag = function(callback)
+IndoorReport.prototype.addSensortagReporter = function(callback)
 {
   SensorTag.discover(function(sensorTag) {
     debug('discovered: ' + sensorTag);
-    this._sensorTag = sensorTag;
     
-    this._sensorTag.on('humidityChange', this.onHumidityChanged.bind(this, this._sensorTag));
-    this._sensorTag.on('barometricPressureChange', this.onBarometricPressureChanged.bind(this, this._sensorTag));
-    this._sensorTag.on('irTemperatureChange', this.onIrTemperatureChanged.bind(this, this._sensorTag));
-    this._sensorTag.on('luxometerChange', this.onLuxometerChanged.bind(this, this._sensorTag));
-    this._sensorTag.on('accelerometerChange', this.onAccelerometerChanged.bind(this, this._sensorTag));
-    this._sensorTag.on('batteryLevelChange', this.onBatteryLevelChanged.bind(this, this._sensorTag));
-    this._sensorTag.on('disconnect', this.onDisconnect.bind(this, this._sensorTag));
+    this._sensorTags[sensorTag.uuid] = sensorTag;
     
-    callback(null, sensorTag);
+    this._sensorTags[sensorTag.uuid]._bindings = {};
+    this._sensorTags[sensorTag.uuid]._bindings.onHumidityChanged = this.onHumidityChanged.bind(this, this._sensorTags[sensorTag.uuid]);
+    this._sensorTags[sensorTag.uuid]._bindings.onBarometricPressureChanged = this.onBarometricPressureChanged.bind(this, this._sensorTags[sensorTag.uuid]);
+    this._sensorTags[sensorTag.uuid]._bindings.onIrTemperatureChanged = this.onIrTemperatureChanged.bind(this, this._sensorTags[sensorTag.uuid]);
+    this._sensorTags[sensorTag.uuid]._bindings.onLuxometerChanged = this.onLuxometerChanged.bind(this, this._sensorTags[sensorTag.uuid]);
+    this._sensorTags[sensorTag.uuid]._bindings.onAccelerometerChanged = this.onAccelerometerChanged.bind(this, this._sensorTags[sensorTag.uuid]);
+    this._sensorTags[sensorTag.uuid]._bindings.onBatteryLevelChanged = this.onBatteryLevelChanged.bind(this, this._sensorTags[sensorTag.uuid]);
+    this._sensorTags[sensorTag.uuid]._bindings.onDisconnect = this.onDisconnect.bind(this, this._sensorTags[sensorTag.uuid]);
+    
+    this._sensorTags[sensorTag.uuid].on('humidityChange', this._sensorTags[sensorTag.uuid]._bindings.onHumidityChanged);
+    this._sensorTags[sensorTag.uuid].on('barometricPressureChange', this._sensorTags[sensorTag.uuid]._bindings.onBarometricPressureChanged);
+    this._sensorTags[sensorTag.uuid].on('irTemperatureChange', this._sensorTags[sensorTag.uuid]._bindings.onIrTemperatureChanged);
+    this._sensorTags[sensorTag.uuid].on('luxometerChange', this._sensorTags[sensorTag.uuid]._bindings.onLuxometerChanged);
+    this._sensorTags[sensorTag.uuid].on('accelerometerChange', this._sensorTags[sensorTag.uuid]._bindings.onAccelerometerChanged);
+    this._sensorTags[sensorTag.uuid].on('batteryLevelChange', this._sensorTags[sensorTag.uuid]._bindings.onBatteryLevelChanged);
+    this._sensorTags[sensorTag.uuid].on('disconnect', this._sensorTags[sensorTag.uuid]._bindings.onDisconnect);
+      
+    this.startCapture(this._sensorTags[sensorTag.uuid], callback);
   }.bind(this));
 };
 
 IndoorReport.prototype.startCapture = function(sensorTag, callback)
 {
-  
+  //console.log(sensorTag, fn_callback);
   async.series([
-               function(callback) {
+               function(callback_series) {
                 debug('connectAndSetUp');
-                sensorTag.connectAndSetUp(callback);
+                sensorTag.connectAndSetUp(callback_series);
               },
               function(callback_series) {
                 debug('enable humidity and temperature');
@@ -81,7 +95,7 @@ IndoorReport.prototype.startCapture = function(sensorTag, callback)
               },
               function(callback_series) {
                 debug('set humidity and temperature period');
-                sensorTag.setHumidityPeriod(2000, callback_series);
+                sensorTag.setHumidityPeriod(10000, callback_series);
               },              
               function(callback_series) {
                 debug('notify humidity and temperature');
@@ -93,7 +107,7 @@ IndoorReport.prototype.startCapture = function(sensorTag, callback)
               },
               function(callback_series) {
                 debug('set barometric pressure period');
-                sensorTag.setBarometricPressurePeriod(10000, callback_series);
+                sensorTag.setBarometricPressurePeriod(30000, callback_series);
               },
               function(callback_series) {
                 debug('notify barometric pressure');
@@ -105,7 +119,7 @@ IndoorReport.prototype.startCapture = function(sensorTag, callback)
               },
               function(callback_series) {
                 debug('set ambient temperature period');
-                sensorTag.setIrTemperaturePeriod(2000, callback_series);
+                sensorTag.setIrTemperaturePeriod(10000, callback_series);
               },
               function(callback_series) {
                 debug('notify ambient temperature');
@@ -117,7 +131,7 @@ IndoorReport.prototype.startCapture = function(sensorTag, callback)
               },
               function(callback_series) {
                 debug('set luxometer period');
-                sensorTag.setLuxometerPeriod(2000, callback_series);
+                sensorTag.setLuxometerPeriod(10000, callback_series);
               },
               function(callback_series) {
                 debug('notify luxometer');
@@ -133,10 +147,6 @@ IndoorReport.prototype.startCapture = function(sensorTag, callback)
               },
               function(callback_series) {
                 debug('set accelerometer period');
-                sensorTag.setAccelerometerPeriod(200, callback_series);
-              },
-              function(callback_series) {
-                debug('set accelerometer range to 2G');
                 sensorTag.setAccelerometerPeriod(200, callback_series);
               },
               function(callback_series) {
@@ -156,43 +166,48 @@ IndoorReport.prototype.startCapture = function(sensorTag, callback)
                     //remove sensortag from object
                     this._sensorTag = null;
                     debug('sensortag disconnected');
+                    callback(new Error(err + ' cannot start capture'), sensorTag);
                   });
+                }
+                else
+                {
+                  callback(null, sensorTag);
                 }
               });
 };
 
 IndoorReport.prototype.onHumidityChanged = function(sensorTag, temperature, humidity) {
-  debug('\ttemperature = %d °C', temperature.toFixed(1));
-  debug('\thumidity = %d %', humidity.toFixed(1));
+  debug('\treporter %s - temperature = %d °C', sensorTag.uuid, temperature.toFixed(1));
+  debug('\treporter %s - humidity = %d %', sensorTag.uuid, humidity.toFixed(1));
   this.toDb(sensorTag, "temperature", temperature);
   this.toDb(sensorTag, "humidity", humidity);
 };
 
 IndoorReport.prototype.onBarometricPressureChanged = function(sensorTag, pressure) {
-  debug('\tpressure = %d mBar', pressure.toFixed(1));
+  debug('\treporter %s - pressure = %d mBar', sensorTag.uuid, pressure.toFixed(1));
   this.toDb(sensorTag, "pressure", pressure);
 };
 
 IndoorReport.prototype.onIrTemperatureChanged = function(sensorTag, objectTemperature, ambientTemperature) {
-  debug('\tobject temperature = %d °C', objectTemperature.toFixed(1));
-  debug('\tambient temperature = %d °C', ambientTemperature.toFixed(1))
+  debug('\treporter %s - object temperature = %d °C', sensorTag.uuid, objectTemperature.toFixed(1));
+  debug('\treporter %s - ambient temperature = %d °C', sensorTag.uuid, ambientTemperature.toFixed(1))
   this.toDb(sensorTag, "ambient_temperature", ambientTemperature);
 };
 
 IndoorReport.prototype.onLuxometerChanged = function(sensorTag, lux) {
-  debug('\tLUX = %d lux', lux.toFixed(1));
+  debug('\treporter %s - LUX = %d lux', sensorTag.uuid, lux.toFixed(1));
   this.toDb(sensorTag, "lux", lux);
 };
 
 IndoorReport.prototype.onAccelerometerChanged = function(sensorTag, x, y, z) {
-  debug('\tACCEL  (%d, %d, %d)G', x, y, z);
+  debug('\treporter %s - ACCEL  (%d, %d, %d)G', sensorTag.uuid, x, y, z);
   this.toDb(sensorTag, "accelX", x);
   this.toDb(sensorTag, "accelY", y);
   this.toDb(sensorTag, "accelZ", z);
 };
 
 IndoorReport.prototype.onBatteryLevelChanged = function(sensorTag, level) {
-  debug('\tBattery level  %d%', level);
+  debug('\treporter %s - Battery level  %d%', sensorTag.uuid, level);
   this.toDb(sensorTag, "battery", level);
 };
 
@@ -205,33 +220,30 @@ IndoorReport.prototype.toDb = function(sensorTag, fieldName, fieldValue)
       }});
 };
 
+IndoorReport.prototype.onSensorTagReporterAdded = function(err, sensortag)
+{
+  if(err)
+  {
+    debug(err + ' when adding reporter with uuid ' + sensortag .uuid);
+    delete this._sensorTags[sensorTag.uuid];
+  }
+  debug('try to discover other reporters');
+  indoorReport.addSensortagReporter(this._bindings.onSensorTagReporterAdded);
+};
+
 IndoorReport.prototype.onDisconnect = function(sensorTag)
 {
-  debug('sensortag disconnected - try to reconnect!');
-  this.startCapture(sensorTag, function()
-  {
-    debug('capture restarted');
-  });
+  debug('sensortag disconnected');
 };
+
+
 
 debug("starting sensortag indoor report");
   
 var indoorReport = new IndoorReport(function(err){
-  
   if(err)
   {
     process.exit(2);
   }
-  indoorReport.connectSensortag(function(err, sensortag){
-    if(err)
-    {
-      console.log(err + 'when connecting sensortag');
-      return;
-    }
-    
-    indoorReport.startCapture(sensortag, function()
-    {
-      debug("capture started for sensortag with uuid " + sensortag.uuid);
-    }.bind(this));
-  });
+  indoorReport.addSensortagReporter(indoorReport._bindings.onSensorTagReporterAdded);
 });
