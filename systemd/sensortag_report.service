@@ -1,5 +1,5 @@
 [Unit]
-Description=Grafana service
+Description=Sensortag reporter
 Requires=network.target influxdb.service
 After=network.target influxdb.service                                    
 
