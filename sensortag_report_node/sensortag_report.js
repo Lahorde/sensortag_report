@@ -44,14 +44,64 @@ function IndoorReport(callback)
     username : db_user,
     password : db_pass
   });
-  this._dbClient.createDatabase(db, function(err, result) {
+}
+
+IndoorReport.prototype.init = function(callback)
+{
+  var nbConnectTries = 3;
+  
+  /** check db connection & existence */
+  this._dbClient.getDatabaseNames(function(err, dbNames)
+  {
     if(err)
     {
-      debug(err + ' when creating db ' + db);
+      debug(err + ' unable to get db names - try ' + nbConnectTries + ' times');
+      var timer = setInterval(function(){
+        this._dbClient.getDatabaseNames(function(err, dbNames){
+          nbConnectTries--;
+          if(!err)
+          {
+            clearInterval(timer);
+            this.createDb(dbNames, callback);
+          }
+          
+          if(nbConnectTries === 0)
+          {  
+            clearInterval(timer);
+            debug(err + ' - could not connect to db');
+            callback(new Error(err + ' - could not check db connection or db existence'));
+          }
+          else
+          {
+             debug(err + ' unable to get db names - try ' + nbConnectTries + ' times');
+          }
+        }.bind(this));
+      }.bind(this), 1000);
     }
-     callback(err); 
-  } );  
-}
+    else
+    {
+      this.createDb(dbNames, callback);
+    }
+  }.bind(this));
+};
+
+IndoorReport.prototype.createDb = function(dbNames, callback)
+{
+  if(dbNames.indexOf(db) == -1)
+  {
+    this._dbClient.createDatabase(db, function(err, result) {
+      if(err)
+      {
+        debug(err + ' when creating db ' + db);
+      }
+      callback(err); 
+    });
+  }
+  else
+  {
+    callback();
+  }
+};
 
 IndoorReport.prototype.addSensortagReporter = function(callback)
 {
@@ -240,10 +290,13 @@ IndoorReport.prototype.onDisconnect = function(sensorTag)
 
 debug("starting sensortag indoor report");
   
-var indoorReport = new IndoorReport(function(err){
+var indoorReport = new IndoorReport();
+indoorReport.init(function(err){
   if(err)
   {
+    debug('Unable to init - exit');
     process.exit(2);
   }
+  debug('indoor reported initialized');
   indoorReport.addSensortagReporter(indoorReport._bindings.onSensorTagReporterAdded);
 });
