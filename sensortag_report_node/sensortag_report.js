@@ -48,7 +48,7 @@ function IndoorReport(callback)
 
 IndoorReport.prototype.init = function(callback)
 {
-  var nbConnectTries = 3;
+  var nbConnectTries = 10;
   
   /** check db connection & existence */
   this._dbClient.getDatabaseNames(function(err, dbNames)
@@ -76,7 +76,7 @@ IndoorReport.prototype.init = function(callback)
              debug(err + ' unable to get db names - try ' + nbConnectTries + ' times');
           }
         }.bind(this));
-      }.bind(this), 1000);
+      }.bind(this), 2000);
     }
     else
     {
