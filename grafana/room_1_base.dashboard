@@ -1,7 +1,7 @@
 {
-  "id": 3,
-  "title": "room 2",
-  "originalTitle": "room 2",
+  "id": 1,
+  "title": "room 1",
+  "originalTitle": "room 1",
   "tags": [],
   "style": "dark",
   "timezone": "",
@@ -15,7 +15,11 @@
       "height": "250px",
       "panels": [
         {
-          "aliasColors": {},
+          "aliasColors": {
+            "ambient_temperature": "#CCA300",
+            "ambient_temperature.mean": "#E0752D",
+            "ambient_temperature_TI_ST_c4be84710a04.mean": "#C15C17"
+          },
           "bars": false,
           "datasource": null,
           "editable": true,
@@ -28,6 +32,118 @@
             "threshold2Color": "rgba(234, 112, 112, 0.22)"
           },
           "id": 1,
+          "isNew": true,
+          "legend": {
+            "avg": false,
+            "current": true,
+            "max": false,
+            "min": false,
+            "show": true,
+            "total": false,
+            "values": true
+          },
+          "lines": true,
+          "linewidth": 2,
+          "links": [],
+          "nullPointMode": "connected",
+          "percentage": false,
+          "pointradius": 5,
+          "points": false,
+          "renderer": "flot",
+          "seriesOverrides": [
+            {}
+          ],
+          "span": 12,
+          "stack": false,
+          "steppedLine": false,
+          "targets": [
+            {
+              "dsType": "influxdb",
+              "groupBy": [
+                {
+                  "params": [
+                    "$interval"
+                  ],
+                  "type": "time"
+                },
+                {
+                  "params": [
+                    "null"
+                  ],
+                  "type": "fill"
+                }
+              ],
+              "measurement": "ambient_temperature_TI_ST_c4be84710a04",
+              "policy": "default",
+              "query": "SELECT mean(\"value\") FROM \"ambient_temperature_TI-ST_c4be84710a04\" WHERE $timeFilter GROUP BY time($interval) fill(null)",
+              "rawQuery": false,
+              "refId": "B",
+              "resultFormat": "time_series",
+              "select": [
+                [
+                  {
+                    "params": [
+                      "value"
+                    ],
+                    "type": "field"
+                  },
+                  {
+                    "params": [],
+                    "type": "mean"
+                  }
+                ]
+              ],
+              "tags": []
+            }
+          ],
+          "timeFrom": null,
+          "timeShift": null,
+          "title": "Température ambiante",
+          "tooltip": {
+            "msResolution": false,
+            "shared": true,
+            "value_type": "cumulative"
+          },
+          "transparent": true,
+          "type": "graph",
+          "xaxis": {
+            "show": true
+          },
+          "yaxes": [
+            {
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            },
+            {
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            }
+          ]
+        },
+        {
+          "aliasColors": {
+            "humidity_TI_ST_c4be84710a04.mean": "#0A437C"
+          },
+          "bars": false,
+          "datasource": null,
+          "editable": true,
+          "error": false,
+          "fill": 1,
+          "grid": {
+            "threshold1": null,
+            "threshold1Color": "rgba(216, 200, 27, 0.27)",
+            "threshold2": null,
+            "threshold2Color": "rgba(234, 112, 112, 0.22)"
+          },
+          "id": 7,
           "isNew": true,
           "legend": {
             "avg": false,
@@ -67,7 +183,7 @@
                   "type": "fill"
                 }
               ],
-              "measurement": "ambient_temperature_TI_ST_c4be84701f8f",
+              "measurement": "humidity_TI_ST_c4be84710a04",
               "policy": "default",
               "refId": "A",
               "resultFormat": "time_series",
@@ -90,12 +206,13 @@
           ],
           "timeFrom": null,
           "timeShift": null,
-          "title": "Température ambiante",
+          "title": "Humidité",
           "tooltip": {
             "msResolution": false,
             "shared": true,
             "value_type": "cumulative"
           },
+          "transparent": true,
           "type": "graph",
           "xaxis": {
             "show": true
@@ -128,7 +245,9 @@
       "height": "250px",
       "panels": [
         {
-          "aliasColors": {},
+          "aliasColors": {
+            "lux_TI_ST_c4be84710a04.mean": "#F2C96D"
+          },
           "bars": false,
           "datasource": null,
           "editable": true,
@@ -140,7 +259,7 @@
             "threshold2": null,
             "threshold2Color": "rgba(234, 112, 112, 0.22)"
           },
-          "id": 2,
+          "id": 8,
           "isNew": true,
           "legend": {
             "avg": false,
@@ -180,120 +299,7 @@
                   "type": "fill"
                 }
               ],
-              "measurement": "humidity_TI_ST_c4be84701f8f",
-              "policy": "default",
-              "refId": "A",
-              "resultFormat": "time_series",
-              "select": [
-                [
-                  {
-                    "params": [
-                      "value"
-                    ],
-                    "type": "field"
-                  },
-                  {
-                    "params": [],
-                    "type": "mean"
-                  }
-                ]
-              ],
-              "tags": []
-            }
-          ],
-          "timeFrom": null,
-          "timeShift": null,
-          "title": "Humidité",
-          "tooltip": {
-            "msResolution": false,
-            "shared": true,
-            "value_type": "cumulative"
-          },
-          "type": "graph",
-          "xaxis": {
-            "show": true
-          },
-          "yaxes": [
-            {
-              "format": "short",
-              "label": null,
-              "logBase": 1,
-              "max": null,
-              "min": null,
-              "show": true
-            },
-            {
-              "format": "short",
-              "label": null,
-              "logBase": 1,
-              "max": null,
-              "min": null,
-              "show": true
-            }
-          ]
-        }
-      ],
-      "title": "New row"
-    },
-    {
-      "collapse": false,
-      "editable": true,
-      "height": "250px",
-      "panels": [
-        {
-          "aliasColors": {},
-          "bars": false,
-          "datasource": null,
-          "editable": true,
-          "error": false,
-          "fill": 1,
-          "grid": {
-            "threshold1": null,
-            "threshold1Color": "rgba(216, 200, 27, 0.27)",
-            "threshold2": null,
-            "threshold2Color": "rgba(234, 112, 112, 0.22)"
-          },
-          "id": 3,
-          "isNew": true,
-          "legend": {
-            "avg": false,
-            "current": false,
-            "max": false,
-            "min": false,
-            "show": true,
-            "total": false,
-            "values": false
-          },
-          "lines": true,
-          "linewidth": 2,
-          "links": [],
-          "nullPointMode": "connected",
-          "percentage": false,
-          "pointradius": 5,
-          "points": false,
-          "renderer": "flot",
-          "seriesOverrides": [],
-          "span": 12,
-          "stack": false,
-          "steppedLine": false,
-          "targets": [
-            {
-              "dsType": "influxdb",
-              "groupBy": [
-                {
-                  "params": [
-                    "$interval"
-                  ],
-                  "type": "time"
-                },
-                {
-                  "params": [
-                    "null"
-                  ],
-                  "type": "fill"
-                }
-              ],
-              "measurement": "lux_TI_ST_c4be84701f8f",
+              "measurement": "lux_TI_ST_c4be84710a04",
               "policy": "default",
               "refId": "A",
               "resultFormat": "time_series",
@@ -356,7 +362,7 @@
         {
           "cacheTimeout": null,
           "colorBackground": false,
-          "colorValue": false,
+          "colorValue": true,
           "colors": [
             "rgba(245, 54, 54, 0.9)",
             "rgba(237, 129, 40, 0.89)",
@@ -370,14 +376,15 @@
             "maxValue": 100,
             "minValue": 0,
             "show": true,
-            "thresholdLabels": false,
+            "thresholdLabels": true,
             "thresholdMarkers": true
           },
-          "id": 4,
+          "id": 6,
           "interval": null,
           "isNew": true,
           "links": [],
           "maxDataPoints": 100,
+          "minSpan": 2,
           "nullPointMode": "connected",
           "nullText": null,
           "postfix": "",
@@ -394,23 +401,11 @@
           "targets": [
             {
               "dsType": "influxdb",
-              "groupBy": [
-                {
-                  "params": [
-                    "$interval"
-                  ],
-                  "type": "time"
-                },
-                {
-                  "params": [
-                    "null"
-                  ],
-                  "type": "fill"
-                }
-              ],
-              "measurement": "humidity_TI_ST_c4be84701f8f",
+              "groupBy": [],
+              "hide": false,
+              "measurement": "battery_TI_ST_c4be84710a04",
               "policy": "default",
-              "query": "SELECT mean(\"value\") FROM \"measurement\" WHERE $timeFilter GROUP BY time($interval) fill(null)",
+              "query": "SELECT last(\"value\") FROM \"battery\"",
               "rawQuery": false,
               "refId": "A",
               "resultFormat": "time_series",
@@ -424,7 +419,7 @@
                   },
                   {
                     "params": [],
-                    "type": "mean"
+                    "type": "last"
                   }
                 ]
               ],
@@ -432,7 +427,8 @@
             }
           ],
           "thresholds": "20,50,80",
-          "title": "Battery",
+          "title": "Batterie",
+          "transparent": true,
           "type": "singlestat",
           "valueFontSize": "80%",
           "valueMaps": [
@@ -445,7 +441,11 @@
           "valueName": "avg"
         },
         {
-          "aliasColors": {},
+          "aliasColors": {
+            "humidity": "#1F78C1",
+            "lux": "#E0F9D7",
+            "lux.mean": "#F9D9F9"
+          },
           "bars": false,
           "datasource": null,
           "editable": true,
@@ -457,16 +457,16 @@
             "threshold2": null,
             "threshold2Color": "rgba(234, 112, 112, 0.22)"
           },
-          "id": 6,
+          "id": 5,
           "isNew": true,
           "legend": {
             "avg": false,
-            "current": false,
+            "current": true,
             "max": false,
             "min": false,
             "show": true,
             "total": false,
-            "values": false
+            "values": true
           },
           "lines": true,
           "linewidth": 2,
@@ -477,28 +477,17 @@
           "points": false,
           "renderer": "flot",
           "seriesOverrides": [],
-          "span": 6,
+          "span": 9,
           "stack": false,
           "steppedLine": false,
           "targets": [
             {
               "dsType": "influxdb",
-              "groupBy": [
-                {
-                  "params": [
-                    "$interval"
-                  ],
-                  "type": "time"
-                },
-                {
-                  "params": [
-                    "null"
-                  ],
-                  "type": "fill"
-                }
-              ],
-              "measurement": "battery_TI_ST_c4be84701f8f",
+              "groupBy": [],
+              "measurement": "battery_TI_ST_c4be84710a04",
               "policy": "default",
+              "query": "SELECT mean(\"value\") FROM \"battery\" WHERE $timeFilter GROUP BY time($interval) fill(null)",
+              "rawQuery": false,
               "refId": "A",
               "resultFormat": "time_series",
               "select": [
@@ -520,12 +509,13 @@
           ],
           "timeFrom": null,
           "timeShift": null,
-          "title": "Battery",
+          "title": "Batterie",
           "tooltip": {
             "msResolution": false,
             "shared": true,
             "value_type": "cumulative"
           },
+          "transparent": true,
           "type": "graph",
           "xaxis": {
             "show": true
@@ -570,7 +560,7 @@
             "threshold2": null,
             "threshold2Color": "rgba(234, 112, 112, 0.22)"
           },
-          "id": 5,
+          "id": 9,
           "isNew": true,
           "legend": {
             "avg": false,
@@ -610,7 +600,7 @@
                   "type": "fill"
                 }
               ],
-              "measurement": "accelX_TI_ST_c4be84701f8f",
+              "measurement": "accelX_TI_ST_c4be84710a04",
               "policy": "default",
               "refId": "A",
               "resultFormat": "time_series",
@@ -646,7 +636,7 @@
                   "type": "fill"
                 }
               ],
-              "measurement": "accelY_TI_ST_c4be84701f8f",
+              "measurement": "accelY_TI_ST_c4be84710a04",
               "policy": "default",
               "refId": "B",
               "resultFormat": "time_series",
@@ -682,7 +672,7 @@
                   "type": "fill"
                 }
               ],
-              "measurement": "accelZ_TI_ST_c4be84701f8f",
+              "measurement": "accelZ_TI_ST_c4be84710a04",
               "policy": "default",
               "refId": "C",
               "resultFormat": "time_series",
@@ -707,7 +697,7 @@
           "timeShift": null,
           "title": "IMU",
           "tooltip": {
-            "msResolution": false,
+            "msResolution": true,
             "shared": true,
             "value_type": "cumulative"
           },
@@ -736,14 +726,22 @@
         }
       ],
       "title": "New row"
+    },
+    {
+      "collapse": false,
+      "editable": true,
+      "height": "250px",
+      "panels": [],
+      "title": "New row"
     }
   ],
   "time": {
-    "from": "now-1h",
+    "from": "now-15m",
     "to": "now"
   },
   "timepicker": {
     "refresh_intervals": [
+      "1s",
       "5s",
       "10s",
       "30s",
@@ -773,7 +771,8 @@
   "annotations": {
     "list": []
   },
+  "refresh": false,
   "schemaVersion": 12,
-  "version": 4,
+  "version": 32,
   "links": []
 }
