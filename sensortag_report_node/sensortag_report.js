@@ -270,12 +270,13 @@ IndoorReport.prototype.toDb = function(sensorTag, fieldName, fieldValue)
       }});
 };
 
-IndoorReport.prototype.onSensorTagReporterAdded = function(err, sensortag)
+IndoorReport.prototype.onSensorTagReporterAdded = function(err, sensorTag)
 {
   if(err)
   {
-    debug(err + ' when adding reporter with uuid ' + sensortag .uuid);
-    delete this._sensorTags[sensorTag.uuid];
+    debug(err + ' when adding reporter with uuid ' + sensorTag .uuid);
+    if(this._sensorTags[sensorTag.uuid])
+      delete this._sensorTags[sensorTag.uuid];
   }
   debug('try to discover other reporters');
   indoorReport.addSensortagReporter(this._bindings.onSensorTagReporterAdded);
