@@ -213,8 +213,6 @@ IndoorReport.prototype.startCapture = function(sensorTag, callback)
                 {
                   debug(err + ' during start capture - disconnect sensortag');
                   sensorTag.disconnect(function(){
-                    //remove sensortag from object
-                    this._sensorTag = null;
                     debug('sensortag disconnected');
                     callback(new Error(err + ' cannot start capture'), sensorTag);
                   });
