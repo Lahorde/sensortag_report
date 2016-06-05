@@ -20,7 +20,9 @@ then
   echo 'invalid sensortag uuid given : must be an hexa number of 12 length'
   exit 1
 else
-  sed -E "s/room 1/$1/;s/TI_ST_c4be84710a04/TI_ST_$2/" ./room_1_base.dashboard > "$1".dashboard
+  #set uuid in lower case 
+  uuid=$(echo "$2" | tr '[:upper:]' '[:lower:]')
+  sed -E "s/room 1/$1/;s/TI_ST_c4be84710a04/TI_ST_$uuid/" ./room_1_base.dashboard > "$1".dashboard
 fi   
 
 exit 0
