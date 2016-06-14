@@ -204,6 +204,14 @@ IndoorReport.prototype.startCapture = function(sensorTag, callback)
                 sensorTag.notifyAccelerometer(callback_series);
               },
               function(callback_series) {
+                debug('read battery level');
+                sensorTag.readBatteryLevel(function(err, level){
+                  if(!err)
+                    this.onBatteryLevelChanged(sensorTag, level);
+                  callback_series(err);
+                }.bind(this));
+              }.bind(this),
+              function(callback_series) {
                 debug('notify battery level');
                 sensorTag.notifyBatteryLevel(callback_series);
               }.bind(this),
@@ -238,7 +246,7 @@ IndoorReport.prototype.onBarometricPressureChanged = function(sensorTag, pressur
 
 IndoorReport.prototype.onIrTemperatureChanged = function(sensorTag, objectTemperature, ambientTemperature) {
   debug('\treporter %s - object temperature = %d °C', sensorTag.uuid, objectTemperature.toFixed(1));
-  debug('\treporter %s - ambient temperature = %d °C', sensorTag.uuid, ambientTemperature.toFixed(1))
+  debug('\treporter %s - ambient temperature = %d °C', sensorTag.uuid, ambientTemperature.toFixed(1));
   this.toDb(sensorTag, "ambient_temperature", ambientTemperature);
 };
 
