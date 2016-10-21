@@ -1,5 +1,5 @@
 {
-  "id": 1,
+  "id": 7,
   "title": "room 1",
   "originalTitle": "room 1",
   "tags": [],
@@ -75,8 +75,8 @@
               ],
               "measurement": "ambient_temperature_TI_ST_c4be84710a04",
               "policy": "default",
-              "query": "SELECT mean(\"value\") FROM \"ambient_temperature_TI-ST_c4be84710a04\" WHERE $timeFilter GROUP BY time($interval) fill(null)",
-              "rawQuery": false,
+              "query": "SELECT mean(\"value\") FROM \"ambient_temperature_TI_ST_c4be84710a04\" WHERE $timeFilter GROUP BY time($interval) fill(null)",
+              "rawQuery": true,
               "refId": "B",
               "resultFormat": "time_series",
               "select": [
@@ -208,7 +208,7 @@
           "timeShift": null,
           "title": "Humidité",
           "tooltip": {
-            "msResolution": false,
+            "msResolution": true,
             "shared": true,
             "value_type": "cumulative"
           },
@@ -349,7 +349,8 @@
               "min": null,
               "show": true
             }
-          ]
+          ],
+          "transparent": true
         }
       ],
       "title": "New row"
@@ -731,8 +732,124 @@
       "collapse": false,
       "editable": true,
       "height": "250px",
-      "panels": [],
+      "panels": [
+        {
+          "title": "Pression",
+          "error": false,
+          "span": 12,
+          "editable": true,
+          "type": "graph",
+          "isNew": true,
+          "id": 10,
+          "targets": [
+            {
+              "policy": "default",
+              "dsType": "influxdb",
+              "resultFormat": "time_series",
+              "tags": [],
+              "groupBy": [
+                {
+                  "type": "time",
+                  "params": [
+                    "$interval"
+                  ]
+                },
+                {
+                  "type": "fill",
+                  "params": [
+                    "null"
+                  ]
+                }
+              ],
+              "select": [
+                [
+                  {
+                    "type": "field",
+                    "params": [
+                      "value"
+                    ]
+                  },
+                  {
+                    "type": "mean",
+                    "params": []
+                  }
+                ]
+              ],
+              "refId": "A",
+              "measurement": "pressure_TI_ST_c4be84710a04",
+              "query": "SELECT mean(\"value\") FROM \"pressure_TI_ST_c4be84710a04\" WHERE $timeFilter GROUP BY time($interval) fill(null)",
+              "rawQuery": true
+            }
+          ],
+          "datasource": null,
+          "renderer": "flot",
+          "yaxes": [
+            {
+              "label": null,
+              "show": true,
+              "logBase": 1,
+              "min": null,
+              "max": null,
+              "format": "short"
+            },
+            {
+              "label": null,
+              "show": true,
+              "logBase": 1,
+              "min": null,
+              "max": null,
+              "format": "short"
+            }
+          ],
+          "xaxis": {
+            "show": true
+          },
+          "grid": {
+            "threshold1": null,
+            "threshold2": null,
+            "threshold1Color": "rgba(216, 200, 27, 0.27)",
+            "threshold2Color": "rgba(234, 112, 112, 0.22)"
+          },
+          "lines": true,
+          "fill": 1,
+          "linewidth": 2,
+          "points": false,
+          "pointradius": 5,
+          "bars": false,
+          "stack": false,
+          "percentage": false,
+          "legend": {
+            "show": true,
+            "values": false,
+            "min": false,
+            "max": false,
+            "current": false,
+            "total": false,
+            "avg": false
+          },
+          "nullPointMode": "connected",
+          "steppedLine": false,
+          "tooltip": {
+            "value_type": "cumulative",
+            "shared": true,
+            "msResolution": false
+          },
+          "timeFrom": null,
+          "timeShift": null,
+          "aliasColors": {},
+          "seriesOverrides": [],
+          "links": [],
+          "transparent": true
+        }
+      ],
       "title": "New row"
+    },
+    {
+      "title": "New row",
+      "height": "250px",
+      "editable": true,
+      "collapse": false,
+      "panels": []
     }
   ],
   "time": {
@@ -773,6 +890,6 @@
   },
   "refresh": false,
   "schemaVersion": 12,
-  "version": 32,
+  "version": 2,
   "links": []
 }
