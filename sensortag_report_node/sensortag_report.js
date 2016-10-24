@@ -4,6 +4,9 @@ var SensorTag = require('sensortag');
 var debug = require('debug')('sensortag_report');
 var influx = require('influx');
 
+/*****************************************************
+ * Program parameters
+ * **************************************************/
 if(process.env.DB){
   var db = process.env.DB;
 }
@@ -27,6 +30,24 @@ else{
   process.exit(1);
 }
 
+
+/***************************************************************************
+ * Sensortag method overload because of modification in sensortag firmware  
+ * *************************************************************************/
+/** Sensortag firmware modified in order to have period on range 1 -> 255 with a 1s resolution */
+SensorTag.CC2650.prototype.writePeriodCharacteristic = function(serviceUuid, characteristicUuid, period, callback) {
+  if (period < 1) {
+    period = 1;
+  } else if (period > 255) {
+    period = 255;
+  }
+  this.writeUInt8Characteristic(serviceUuid, characteristicUuid, period, callback);
+};
+
+
+/*****************************************************
+ * IndoorReport Class 
+ * **************************************************/
 function IndoorReport(callback)
 {
   this._sensorTags = {};
@@ -145,7 +166,8 @@ IndoorReport.prototype.startCapture = function(sensorTag, callback)
               },
               function(callback_series) {
                 debug('set humidity and temperature period');
-                sensorTag.setHumidityPeriod(10000, callback_series);
+                //5s period
+                sensorTag.setHumidityPeriod(5, callback_series);
               },              
               function(callback_series) {
                 debug('notify humidity and temperature');
@@ -157,7 +179,7 @@ IndoorReport.prototype.startCapture = function(sensorTag, callback)
               },
               function(callback_series) {
                 debug('set barometric pressure period');
-                sensorTag.setBarometricPressurePeriod(30000, callback_series);
+                sensorTag.setBarometricPressurePeriod(30, callback_series);
               },
               function(callback_series) {
                 debug('notify barometric pressure');
@@ -169,7 +191,7 @@ IndoorReport.prototype.startCapture = function(sensorTag, callback)
               },
               function(callback_series) {
                 debug('set ambient temperature period');
-                sensorTag.setIrTemperaturePeriod(10000, callback_series);
+                sensorTag.setIrTemperaturePeriod(5, callback_series);
               },
               function(callback_series) {
                 debug('notify ambient temperature');
@@ -181,7 +203,7 @@ IndoorReport.prototype.startCapture = function(sensorTag, callback)
               },
               function(callback_series) {
                 debug('set luxometer period');
-                sensorTag.setLuxometerPeriod(10000, callback_series);
+                sensorTag.setLuxometerPeriod(5, callback_series);
               },
               function(callback_series) {
                 debug('notify luxometer');
@@ -197,7 +219,7 @@ IndoorReport.prototype.startCapture = function(sensorTag, callback)
               },
               function(callback_series) {
                 debug('set accelerometer period');
-                sensorTag.setAccelerometerPeriod(200, callback_series);
+                sensorTag.setAccelerometerPeriod(2, callback_series);
               },
               function(callback_series) {
                 debug('notify luxometer');
@@ -295,6 +317,9 @@ IndoorReport.prototype.onDisconnect = function(sensorTag)
 
 
 
+/*****************************************************
+ * Indoor report scenario 
+ * **************************************************/
 debug("starting sensortag indoor report");
   
 var indoorReport = new IndoorReport();
