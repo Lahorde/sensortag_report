@@ -51,12 +51,12 @@ SensorTag.CC2650.prototype.writePeriodCharacteristic = function(serviceUuid, cha
 function IndoorReport(callback)
 {
   this._sensorTags = {};
-  
+
   this._bindings = {};
   this._bindings.onSensorTagReporterAdded = this.onSensorTagReporterAdded.bind(this);
-  
+
   this._dbClient = influx({
-  
+
     //single-host configuration 
     host : 'localhost',
     port : 8086, // optional, default 8086 
@@ -70,40 +70,40 @@ function IndoorReport(callback)
 IndoorReport.prototype.init = function(callback)
 {
   var nbConnectTries = 10;
-  
+
   /** check db connection & existence */
   this._dbClient.getDatabaseNames(function(err, dbNames)
-  {
-    if(err)
-    {
-      debug(err + ' unable to get db names - try ' + nbConnectTries + ' times');
-      var timer = setInterval(function(){
-        this._dbClient.getDatabaseNames(function(err, dbNames){
-          nbConnectTries--;
-          if(!err)
-          {
-            clearInterval(timer);
-            this.createDb(dbNames, callback);
-          }
-          
-          if(nbConnectTries === 0)
-          {  
-            clearInterval(timer);
-            debug(err + ' - could not connect to db');
-            callback(new Error(err + ' - could not check db connection or db existence'));
-          }
-          else
-          {
-             debug(err + ' unable to get db names - try ' + nbConnectTries + ' times');
-          }
-        }.bind(this));
-      }.bind(this), 2000);
-    }
-    else
-    {
-      this.createDb(dbNames, callback);
-    }
-  }.bind(this));
+      {
+        if(err)
+        {
+          debug(err + ' unable to get db names - try ' + nbConnectTries + ' times');
+          var timer = setInterval(function(){
+            this._dbClient.getDatabaseNames(function(err, dbNames){
+              nbConnectTries--;
+              if(!err)
+              {
+                clearInterval(timer);
+                this.createDb(dbNames, callback);
+              }
+
+              if(nbConnectTries === 0)
+              {  
+                clearInterval(timer);
+                debug(err + ' - could not connect to db');
+                callback(new Error(err + ' - could not check db connection or db existence'));
+              }
+              else
+              {
+                debug(err + ' unable to get db names - try ' + nbConnectTries + ' times');
+              }
+            }.bind(this));
+          }.bind(this), 2000);
+        }
+        else
+        {
+          this.createDb(dbNames, callback);
+        }
+      }.bind(this));
 };
 
 IndoorReport.prototype.createDb = function(dbNames, callback)
@@ -128,9 +128,9 @@ IndoorReport.prototype.addSensortagReporter = function(callback)
 {
   SensorTag.discover(function(sensorTag) {
     debug('discovered: ' + sensorTag);
-    
+
     this._sensorTags[sensorTag.uuid] = sensorTag;
-    
+
     this._sensorTags[sensorTag.uuid]._bindings = {};
     this._sensorTags[sensorTag.uuid]._bindings.onHumidityChanged = this.onHumidityChanged.bind(this, this._sensorTags[sensorTag.uuid]);
     this._sensorTags[sensorTag.uuid]._bindings.onBarometricPressureChanged = this.onBarometricPressureChanged.bind(this, this._sensorTags[sensorTag.uuid]);
@@ -139,119 +139,155 @@ IndoorReport.prototype.addSensortagReporter = function(callback)
     this._sensorTags[sensorTag.uuid]._bindings.onAccelerometerChanged = this.onAccelerometerChanged.bind(this, this._sensorTags[sensorTag.uuid]);
     this._sensorTags[sensorTag.uuid]._bindings.onBatteryLevelChanged = this.onBatteryLevelChanged.bind(this, this._sensorTags[sensorTag.uuid]);
     this._sensorTags[sensorTag.uuid]._bindings.onDisconnect = this.onDisconnect.bind(this, this._sensorTags[sensorTag.uuid]);
-    
+
     this._sensorTags[sensorTag.uuid].on('humidityChange', this._sensorTags[sensorTag.uuid]._bindings.onHumidityChanged);
     this._sensorTags[sensorTag.uuid].on('barometricPressureChange', this._sensorTags[sensorTag.uuid]._bindings.onBarometricPressureChanged);
     this._sensorTags[sensorTag.uuid].on('irTemperatureChange', this._sensorTags[sensorTag.uuid]._bindings.onIrTemperatureChanged);
     this._sensorTags[sensorTag.uuid].on('luxometerChange', this._sensorTags[sensorTag.uuid]._bindings.onLuxometerChanged);
     this._sensorTags[sensorTag.uuid].on('accelerometerChange', this._sensorTags[sensorTag.uuid]._bindings.onAccelerometerChanged);
     this._sensorTags[sensorTag.uuid].on('batteryLevelChange', this._sensorTags[sensorTag.uuid]._bindings.onBatteryLevelChanged);
-    this._sensorTags[sensorTag.uuid].on('disconnect', this._sensorTags[sensorTag.uuid]._bindings.onDisconnect);
-      
-    this.startCapture(this._sensorTags[sensorTag.uuid], callback);
+
+    /** Timeout to detect failing reporter adding, in some cases, when peripheral disconnects, no disconnect 
+     * event is sent. So a timeout is needed during this process */
+    var timerId = setTimeout(function()
+        {
+          /** clear disconnect listeners, if not reporter adding disconnect callback can be called later */   
+          this._sensorTags[sensorTag.uuid].removeAllListeners('disconnect');
+          if(sensorTag._peripheral.state === 'connected'){                  
+            debug('try to deconnect reporter');
+            sensorTag.disconnect(function(){
+              debug('reporter disconnected');
+              callback('reporter ' + sensorTag.uuid + ' timeout during preparation for capture', sensorTag);
+            });
+          }
+          else
+          {
+            callback('reporter ' + sensorTag.uuid + ' timeout during preparation for capture', sensorTag);
+          }
+        }.bind(this), 15000);
+
+    /** If tag disconnected during adding => exit */
+    this._sensorTags[sensorTag.uuid].on('disconnect', function(){
+      clearTimeout(timerId);
+      callback('tag ' + sensorTag.uuid + ' disconnected during preparation for capture', sensorTag);
+    });
+
+    this.startCapture(this._sensorTags[sensorTag.uuid], function(err){
+      clearTimeout(timerId);
+      this._sensorTags[sensorTag.uuid].removeAllListeners('disconnect');
+      this._sensorTags[sensorTag.uuid].on('disconnect', this._sensorTags[sensorTag.uuid]._bindings.onDisconnect);
+      clearTimeout(timerId);
+      callback(err, sensorTag);
+    }.bind(this));
   }.bind(this));
 };
 
 IndoorReport.prototype.startCapture = function(sensorTag, callback)
 {
-  //console.log(sensorTag, fn_callback);
   async.series([
-               function(callback_series) {
-                debug('connectAndSetUp');
-                sensorTag.connectAndSetUp(callback_series);
-              },
-              function(callback_series) {
-                debug('enable humidity and temperature');
-                sensorTag.enableHumidity(callback_series);
-              },
-              function(callback_series) {
-                debug('set humidity and temperature period');
-                //5s period
-                sensorTag.setHumidityPeriod(5, callback_series);
-              },              
-              function(callback_series) {
-                debug('notify humidity and temperature');
-                sensorTag.notifyHumidity(callback_series);
-              },
-              function(callback_series) {
-                debug('enable barometric pressure');
-                sensorTag.enableBarometricPressure(callback_series);
-              },
-              function(callback_series) {
-                debug('set barometric pressure period');
-                sensorTag.setBarometricPressurePeriod(30, callback_series);
-              },
-              function(callback_series) {
-                debug('notify barometric pressure');
-                sensorTag.notifyBarometricPressure(callback_series);
-              },
-              function(callback_series) {
-                debug('enable ambient temperature');
-                sensorTag.enableIrTemperature(callback_series);
-              },
-              function(callback_series) {
-                debug('set ambient temperature period');
-                sensorTag.setIrTemperaturePeriod(5, callback_series);
-              },
-              function(callback_series) {
-                debug('notify ambient temperature');
-                sensorTag.notifyIrTemperature(callback_series);
-              },
-              function(callback_series) {
-                debug('enable luxometer');
-                sensorTag.enableLuxometer(callback_series);
-              },
-              function(callback_series) {
-                debug('set luxometer period');
-                sensorTag.setLuxometerPeriod(5, callback_series);
-              },
-              function(callback_series) {
-                debug('notify luxometer');
-                sensorTag.notifyLuxometer(callback_series);
-              },
-              function(callback_series) {
-                debug('enable wom');
-                sensorTag.enableWOM(callback_series);
-              },
-              function(callback_series) {
-                debug('enable accelerometer');
-                sensorTag.enableAccelerometer(callback_series);
-              },
-              function(callback_series) {
-                debug('set accelerometer period');
-                sensorTag.setAccelerometerPeriod(2, callback_series);
-              },
-              function(callback_series) {
-                debug('notify luxometer');
-                sensorTag.notifyAccelerometer(callback_series);
-              },
-              function(callback_series) {
-                debug('read battery level');
-                sensorTag.readBatteryLevel(function(err, level){
-                  if(!err)
-                    this.onBatteryLevelChanged(sensorTag, level);
-                  callback_series(err);
-                }.bind(this));
-              }.bind(this),
-              function(callback_series) {
-                debug('notify battery level');
-                sensorTag.notifyBatteryLevel(callback_series);
-              }.bind(this),
-            ],
-            function(err, results){
-                if(err)
-                {
-                  debug(err + ' during start capture - disconnect sensortag');
-                  sensorTag.disconnect(function(){
-                    debug('sensortag disconnected');
-                    callback(new Error(err + ' cannot start capture'), sensorTag);
-                  });
-                }
-                else
-                {
-                  callback(null, sensorTag);
-                }
-              });
+    function(callback_series) {
+      debug('connectAndSetUp');
+      sensorTag.connectAndSetUp(callback_series);
+    },
+    function(callback_series) {
+      debug('enable humidity and temperature');
+      sensorTag.enableHumidity(callback_series);
+    },
+    function(callback_series) {
+      debug('set humidity and temperature period');
+      //5s period
+      sensorTag.setHumidityPeriod(5, callback_series);
+    },              
+    function(callback_series) {
+      debug('notify humidity and temperature');
+      sensorTag.notifyHumidity(callback_series);
+    },
+    function(callback_series) {
+      debug('enable barometric pressure');
+      sensorTag.enableBarometricPressure(callback_series);
+    },
+    function(callback_series) {
+      debug('set barometric pressure period');
+      sensorTag.setBarometricPressurePeriod(30, callback_series);
+    },
+    function(callback_series) {
+      debug('notify barometric pressure');
+      sensorTag.notifyBarometricPressure(callback_series);
+    },
+    function(callback_series) {
+      debug('enable ambient temperature');
+      sensorTag.enableIrTemperature(callback_series);
+    },
+    function(callback_series) {
+      debug('set ambient temperature period');
+      sensorTag.setIrTemperaturePeriod(5, callback_series);
+    },
+    function(callback_series) {
+      debug('notify ambient temperature');
+      sensorTag.notifyIrTemperature(callback_series);
+    },
+    function(callback_series) {
+      debug('enable luxometer');
+      sensorTag.enableLuxometer(callback_series);
+    },
+    function(callback_series) {
+      debug('set luxometer period');
+      sensorTag.setLuxometerPeriod(5, callback_series);
+    },
+    function(callback_series) {
+      debug('notify luxometer');
+      sensorTag.notifyLuxometer(callback_series);
+    },
+    function(callback_series) {
+      debug('enable wom');
+      sensorTag.enableWOM(callback_series);
+    },
+    function(callback_series) {
+      debug('enable accelerometer');
+      sensorTag.enableAccelerometer(callback_series);
+    },
+    function(callback_series) {
+      debug('set accelerometer period');
+      sensorTag.setAccelerometerPeriod(2, callback_series);
+    },
+    function(callback_series) {
+      debug('notify luxometer');
+      sensorTag.notifyAccelerometer(callback_series);
+    },
+    function(callback_series) {
+      debug('read battery level');
+      sensorTag.readBatteryLevel(function(err, level){
+        if(!err)
+          this.onBatteryLevelChanged(sensorTag, level);
+        callback_series(err);
+      }.bind(this));
+    }.bind(this),
+    function(callback_series) {
+      debug('notify battery level');
+      sensorTag.notifyBatteryLevel(callback_series);
+    }.bind(this),
+  ],
+  function(err, results){
+    if(err)
+    {
+      debug(err + ' during start capture');
+      if(sensorTag._peripheral.state === 'connected'){                  
+        debug('try to deconnect reporter');
+        sensorTag.disconnect(function(){
+          debug('reporter disconnected');
+          callback(new Error(err + ' cannot start capture'), sensorTag);
+        });
+      }
+      else
+      {
+        callback(new Error(err + ' cannot start capture'), sensorTag);
+      }
+    }
+    else
+    {
+      callback(null, sensorTag);
+    }
+  });
 };
 
 IndoorReport.prototype.onHumidityChanged = function(sensorTag, temperature, humidity) {
@@ -293,9 +329,9 @@ IndoorReport.prototype.toDb = function(sensorTag, fieldName, fieldValue)
 {
   this._dbClient.writePoint(fieldName+ '_TI_ST_' + sensorTag.uuid, {time: new Date(), value: fieldValue}, null, function(err, response) { 
     if(err)
-      {
-        debug("Cannot write to db : " + err);
-      }});
+    {
+      debug("Cannot write to db : " + err);
+    }});
 };
 
 IndoorReport.prototype.onSensorTagReporterAdded = function(err, sensorTag)
@@ -321,7 +357,7 @@ IndoorReport.prototype.onDisconnect = function(sensorTag)
  * Indoor report scenario 
  * **************************************************/
 debug("starting sensortag indoor report");
-  
+
 var indoorReport = new IndoorReport();
 indoorReport.init(function(err){
   if(err)
