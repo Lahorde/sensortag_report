@@ -30,6 +30,50 @@ else{
   process.exit(1);
 }
 
+/*******************************************************************************
+ * Exit handlers
+ ******************************************************************************/
+
+process.stdin.resume(); // so the program will not close instantly
+
+function exitHandler(options, err) {
+  //only keep uncaught exception listener
+  process.removeAllListeners('exit');
+  process.removeAllListeners('SIGINT');
+  debug('exiting reporter...');
+  if (options.cleanup){
+    indoorReport.close(function(err){
+      debug('indoor reporter closed');
+      if (err) debug(err.stack);
+      if (options.exit) process.exit();
+    });
+  }
+  else{
+    if (err) debug(err.stack);
+    if (options.exit){
+      process.exit();
+    }
+  }
+}
+
+//do something when app is closing
+process.on('exit', function(){
+  debug('exit signal caught');
+  exitHandler({cleanup : true}, null);
+});
+
+//catches ctrl+c event
+process.on('SIGINT', function(){
+  debug('SIGINT signal caught');
+  exitHandler({cleanup : true, exit : true}, null);
+});
+
+//catches uncaught exceptions
+process.on('uncaughtException', function(exc){
+  debug('uncaught exception : ' + exc);
+  exitHandler({exit : true}, exc);
+});
+
 
 /***************************************************************************
  * Sensortag method overload because of modification in sensortag firmware  
@@ -164,13 +208,14 @@ IndoorReport.prototype.addSensortagReporter = function(callback)
           {
             callback('reporter ' + sensorTag.uuid + ' timeout during preparation for capture', sensorTag);
           }
-        }.bind(this), 15000);
+        }.bind(this), 10000);
 
     /** If tag disconnected during adding => exit */
     this._sensorTags[sensorTag.uuid].on('disconnect', function(){
       clearTimeout(timerId);
+      this._sensorTags[sensorTag.uuid].removeAllListeners('disconnect');
       callback('tag ' + sensorTag.uuid + ' disconnected during preparation for capture', sensorTag);
-    });
+    }.bind(this));
 
     this.startCapture(this._sensorTags[sensorTag.uuid], function(err){
       clearTimeout(timerId);
@@ -343,15 +388,35 @@ IndoorReport.prototype.onSensorTagReporterAdded = function(err, sensorTag)
       delete this._sensorTags[sensorTag.uuid];
   }
   debug('try to discover other reporters');
-  indoorReport.addSensortagReporter(this._bindings.onSensorTagReporterAdded);
+  setTimeout(function(){
+    indoorReport.addSensortagReporter(this._bindings.onSensorTagReporterAdded);
+  }.bind(this), 500);
 };
 
 IndoorReport.prototype.onDisconnect = function(sensorTag)
 {
-  debug('sensortag disconnected');
+  debug('reporter ' + sensorTag.uuid + ' disconnected');
 };
 
-
+IndoorReport.prototype.close = function(callback){
+  async.forEach(Object.keys(this._sensorTags), function(uuid, callbackForEach){
+    if(this._sensorTags[uuid]._peripheral.state === 'connected'){
+      this._sensorTags[uuid].disconnect(callbackForEach);
+    }
+    else{
+      callbackForEach();
+    }
+  }.bind(this), function(err){
+    this._sensorTags = [];
+    if(err){
+      debug('some reporter have not been disconnected');
+    }
+    else{
+      debug('all reporters have been disconnected');
+    }
+    callback(err);
+  }.bind(this));
+};
 
 /*****************************************************
  * Indoor report scenario 
