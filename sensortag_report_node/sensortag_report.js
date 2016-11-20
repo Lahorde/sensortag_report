@@ -2,7 +2,7 @@ var util = require('util');
 var async = require('async');
 var SensorTag = require('sensortag');
 var debug = require('debug')('sensortag_report');
-var influx = require('influx');
+var Influx = require('influx');
 
 /*****************************************************
  * Program parameters
@@ -99,7 +99,7 @@ function IndoorReport(callback)
   this._bindings = {};
   this._bindings.onSensorTagReporterAdded = this.onSensorTagReporterAdded.bind(this);
 
-  this._dbClient = influx({
+  this._dbClient = new Influx.InfluxDB({
 
     //single-host configuration 
     host : 'localhost',
@@ -115,39 +115,35 @@ IndoorReport.prototype.init = function(callback)
 {
   var nbConnectTries = 10;
 
+  debug("create db");
   /** check db connection & existence */
-  this._dbClient.getDatabaseNames(function(err, dbNames)
-      {
-        if(err)
-        {
-          debug(err + ' unable to get db names - try ' + nbConnectTries + ' times');
-          var timer = setInterval(function(){
-            this._dbClient.getDatabaseNames(function(err, dbNames){
-              nbConnectTries--;
-              if(!err)
-              {
-                clearInterval(timer);
-                this.createDb(dbNames, callback);
-              }
-
-              if(nbConnectTries === 0)
-              {  
-                clearInterval(timer);
-                debug(err + ' - could not connect to db');
-                callback(new Error(err + ' - could not check db connection or db existence'));
-              }
-              else
-              {
-                debug(err + ' unable to get db names - try ' + nbConnectTries + ' times');
-              }
-            }.bind(this));
-          }.bind(this), 2000);
-        }
-        else
-        {
-          this.createDb(dbNames, callback);
-        }
-      }.bind(this));
+  this._dbClient.getDatabaseNames()
+    .then(dbNames => {
+      this.createDb(dbNames, callback);
+    })
+    .catch(err => {
+      debug(err + ' unable to get db names - try ' + nbConnectTries + ' times');
+      var timer = setInterval(function(){
+        this._dbClient.getDatabaseNames()
+          .then(dbNames => {
+            clearInterval(timer);
+            this.createDb(dbNames, callback);
+          })
+          .catch(err => {
+            nbConnectTries--;
+            if(nbConnectTries === 0)
+            {  
+              clearInterval(timer);
+              debug(err + ' - could not connect to db');
+              callback(new Error(err + ' - could not check db connection or db existence'));
+            }
+            else
+            {
+              debug(err + ' unable to get db names - try ' + nbConnectTries + ' times');
+            }
+          })
+      }.bind(this), 2000);
+    })
 };
 
 IndoorReport.prototype.createDb = function(dbNames, callback)
@@ -194,21 +190,21 @@ IndoorReport.prototype.addSensortagReporter = function(callback)
     /** Timeout to detect failing reporter adding, in some cases, when peripheral disconnects, no disconnect 
      * event is sent. So a timeout is needed during this process */
     var timerId = setTimeout(function()
-        {
-          /** clear disconnect listeners, if not reporter adding disconnect callback can be called later */   
-          this._sensorTags[sensorTag.uuid].removeAllListeners('disconnect');
-          if(sensorTag._peripheral.state === 'connected'){                  
-            debug('try to deconnect reporter');
-            sensorTag.disconnect(function(){
-              debug('reporter disconnected');
-              callback('reporter ' + sensorTag.uuid + ' timeout during preparation for capture', sensorTag);
-            });
-          }
-          else
-          {
+      {
+        /** clear disconnect listeners, if not reporter adding disconnect callback can be called later */   
+        this._sensorTags[sensorTag.uuid].removeAllListeners('disconnect');
+        if(sensorTag._peripheral.state === 'connected'){                  
+          debug('try to deconnect reporter');
+          sensorTag.disconnect(function(){
+            debug('reporter disconnected');
             callback('reporter ' + sensorTag.uuid + ' timeout during preparation for capture', sensorTag);
-          }
-        }.bind(this), 10000);
+          });
+        }
+        else
+        {
+          callback('reporter ' + sensorTag.uuid + ' timeout during preparation for capture', sensorTag);
+        }
+      }.bind(this), 15000);
 
     /** If tag disconnected during adding => exit */
     this._sensorTags[sensorTag.uuid].on('disconnect', function(){
@@ -312,27 +308,27 @@ IndoorReport.prototype.startCapture = function(sensorTag, callback)
       sensorTag.notifyBatteryLevel(callback_series);
     }.bind(this),
   ],
-  function(err, results){
-    if(err)
-    {
-      debug(err + ' during start capture');
-      if(sensorTag._peripheral.state === 'connected'){                  
-        debug('try to deconnect reporter');
-        sensorTag.disconnect(function(){
-          debug('reporter disconnected');
+    function(err, results){
+      if(err)
+      {
+        debug(err + ' during start capture');
+        if(sensorTag._peripheral.state === 'connected'){                  
+          debug('try to deconnect reporter');
+          sensorTag.disconnect(function(){
+            debug('reporter disconnected');
+            callback(new Error(err + ' cannot start capture'), sensorTag);
+          });
+        }
+        else
+        {
           callback(new Error(err + ' cannot start capture'), sensorTag);
-        });
+        }
       }
       else
       {
-        callback(new Error(err + ' cannot start capture'), sensorTag);
+        callback(null, sensorTag);
       }
-    }
-    else
-    {
-      callback(null, sensorTag);
-    }
-  });
+    });
 };
 
 IndoorReport.prototype.onHumidityChanged = function(sensorTag, temperature, humidity) {
@@ -372,11 +368,16 @@ IndoorReport.prototype.onBatteryLevelChanged = function(sensorTag, level) {
 
 IndoorReport.prototype.toDb = function(sensorTag, fieldName, fieldValue)
 {
-  this._dbClient.writePoint(fieldName+ '_TI_ST_' + sensorTag.uuid, {time: new Date(), value: fieldValue}, null, function(err, response) { 
-    if(err)
+  this._dbClient.writeMeasurement(fieldName+ '_TI_ST_' + sensorTag.uuid, [
     {
+      fields : {
+        value: fieldValue
+      }
+    }
+  ])
+    .catch(err => {
       debug("Cannot write to db : " + err);
-    }});
+    })
 };
 
 IndoorReport.prototype.onSensorTagReporterAdded = function(err, sensorTag)
