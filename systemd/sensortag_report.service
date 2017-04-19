@@ -1,7 +1,7 @@
 [Unit]
 Description=Sensortag reporter
-Requires=network.target influxdb.service
-After=network.target influxdb.service                                    
+Requires=network-online.target influxdb.service
+After=network-online.target influxdb.service                                    
 
 [Service]
 Environment=DEBUG=sensortag_report DB_USER=db_user_id DB_PASS=db_pass
