@@ -1,7 +1,7 @@
 ******************************************************************************
                   TI ARM Linker Unix v15.12.3                  
 ******************************************************************************
->> Linked Wed May 31 16:24:22 2017
+>> Linked Thu Jun  1 09:13:38 2017
 
 OUTPUT FILE NAME:   <sensortag_reporter.out>
 ENTRY POINT SYMBOL: "ResetISR"  address: 0000c875

@@ -102,7 +102,7 @@ function SensortagReport(callback)
   this._dbClient = new Influx.InfluxDB({
 
     //single-host configuration 
-    host : 'rpi-home-master.local',
+    host : 'localhost',
     port : 8086, // optional, default 8086 
     protocol : 'http', // optional, default 'http' 
     database : db,
@@ -176,6 +176,7 @@ SensortagReport.prototype.createDb = function(dbNames, callback)
 
 SensortagReport.prototype.addSensortagReporter = function(callback)
 {
+  debug('try to discover some reporters') 
   SensorTag.discover(function(sensorTag) {
     debug('discovered: ' + sensorTag);
     if(this._sensorTags[sensorTag.uuid] !== undefined)
@@ -264,7 +265,6 @@ SensortagReport.prototype.startCapture = function(sensorTag, callback)
     },
     function(callback_series) {
       debug('set humidity and temperature period');
-      //5s period
       sensorTag.setHumidityPeriod(5, callback_series);
     },              
     function(callback_series) {
@@ -277,7 +277,7 @@ SensortagReport.prototype.startCapture = function(sensorTag, callback)
     },
     function(callback_series) {
       debug('set barometric pressure period');
-      sensorTag.setBarometricPressurePeriod(30, callback_series);
+      sensorTag.setBarometricPressurePeriod(120, callback_series);
     },
     function(callback_series) {
       debug('notify barometric pressure');
@@ -289,7 +289,7 @@ SensortagReport.prototype.startCapture = function(sensorTag, callback)
     },
     function(callback_series) {
       debug('set ambient temperature period');
-      sensorTag.setIrTemperaturePeriod(5, callback_series);
+      sensorTag.setIrTemperaturePeriod(20, callback_series);
     },
     function(callback_series) {
       debug('notify ambient temperature');
@@ -425,7 +425,6 @@ SensortagReport.prototype.onSensorTagReporterAdded = function(err, sensorTag)
     /** No sensortag added */
     debug(err + ' when adding a reporter');
   }
-  debug('try to discover other reporters');
   setTimeout(function(){
     stReport.addSensortagReporter(this._bindings.onSensorTagReporterAdded);
   }.bind(this), 500);
@@ -461,7 +460,7 @@ SensortagReport.prototype.close = function(callback){
 /*****************************************************
  * Sensortag report scenario 
  * **************************************************/
-debug("starting sensortag report");
+debug("%c starting sensortag report", 'green');
 
 var stReport = new SensortagReport();
 stReport.init(function(err){
@@ -470,6 +469,6 @@ stReport.init(function(err){
     debug('Unable to init - exit');
     process.exit(2);
   }
-  debug('sensortag reported initialized');
+  debug('sensortag reporter initialized');
   stReport.addSensortagReporter(stReport._bindings.onSensorTagReporterAdded);
 });
