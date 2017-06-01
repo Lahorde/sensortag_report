@@ -42,8 +42,8 @@ function exitHandler(options, err) {
   process.removeAllListeners('SIGINT');
   debug('exiting reporter...');
   if (options.cleanup){
-    indoorReport.close(function(err){
-      debug('indoor reporter closed');
+    stReport.close(function(err){
+      debug('sensortag  reporter closed');
       if (err) debug(err.stack);
       if (options.exit) process.exit();
     });
@@ -90,9 +90,9 @@ SensorTag.CC2650.prototype.writePeriodCharacteristic = function(serviceUuid, cha
 
 
 /*****************************************************
- * IndoorReport Class 
+ * SensortagReport Class 
  * **************************************************/
-function IndoorReport(callback)
+function SensortagReport(callback)
 {
   this._sensorTags = {};
 
@@ -102,7 +102,7 @@ function IndoorReport(callback)
   this._dbClient = new Influx.InfluxDB({
 
     //single-host configuration 
-    host : 'localhost',
+    host : 'rpi-home-master.local',
     port : 8086, // optional, default 8086 
     protocol : 'http', // optional, default 'http' 
     database : db,
@@ -111,7 +111,17 @@ function IndoorReport(callback)
   });
 }
 
-IndoorReport.prototype.init = function(callback)
+/***************/
+/** CONSTANTS  */
+/***************/
+/** Max connect/setup duration in ms - After many reconnections, it takes some 10s to connect, TODO : investigate it using packet sniffer*/
+SensortagReport.CONNECT_SETUP_MAX_DUR = 30000;
+/** After a successful connection, some ms */
+SensortagReport.WAIT_AFTER_CONN_DUR    = 1500;
+SensortagReport.CONNECT_CONFIG_MAX_DUR = SensortagReport.CONNECT_SETUP_MAX_DUR + SensortagReport.WAIT_AFTER_CONN_DUR + 2000;
+
+
+SensortagReport.prototype.init = function(callback)
 {
   var nbConnectTries = 10;
 
@@ -146,7 +156,7 @@ IndoorReport.prototype.init = function(callback)
     })
 };
 
-IndoorReport.prototype.createDb = function(dbNames, callback)
+SensortagReport.prototype.createDb = function(dbNames, callback)
 {
   if(dbNames.indexOf(db) == -1)
   {
@@ -164,10 +174,17 @@ IndoorReport.prototype.createDb = function(dbNames, callback)
   }
 };
 
-IndoorReport.prototype.addSensortagReporter = function(callback)
+SensortagReport.prototype.addSensortagReporter = function(callback)
 {
   SensorTag.discover(function(sensorTag) {
     debug('discovered: ' + sensorTag);
+    if(this._sensorTags[sensorTag.uuid] !== undefined)
+    {
+      return callback('tag ' + sensorTag.uuid + ' already handled');
+    }
+    else
+    {
+    }
 
     this._sensorTags[sensorTag.uuid] = sensorTag;
 
@@ -194,7 +211,7 @@ IndoorReport.prototype.addSensortagReporter = function(callback)
         /** clear disconnect listeners, if not reporter adding disconnect callback can be called later */   
         this._sensorTags[sensorTag.uuid].removeAllListeners('disconnect');
         if(sensorTag._peripheral.state === 'connected'){                  
-          debug('try to deconnect reporter');
+          debug('try to disconnect reporter');
           sensorTag.disconnect(function(){
             debug('reporter disconnected');
             callback('reporter ' + sensorTag.uuid + ' timeout during preparation for capture', sensorTag);
@@ -204,7 +221,7 @@ IndoorReport.prototype.addSensortagReporter = function(callback)
         {
           callback('reporter ' + sensorTag.uuid + ' timeout during preparation for capture', sensorTag);
         }
-      }.bind(this), 15000);
+      }.bind(this), SensortagReport.CONNECT_CONFIG_MAX_DUR);
 
     /** If tag disconnected during adding => exit */
     this._sensorTags[sensorTag.uuid].on('disconnect', function(){
@@ -215,20 +232,31 @@ IndoorReport.prototype.addSensortagReporter = function(callback)
 
     this.startCapture(this._sensorTags[sensorTag.uuid], function(err){
       clearTimeout(timerId);
-      this._sensorTags[sensorTag.uuid].removeAllListeners('disconnect');
       this._sensorTags[sensorTag.uuid].on('disconnect', this._sensorTags[sensorTag.uuid]._bindings.onDisconnect);
-      clearTimeout(timerId);
       callback(err, sensorTag);
     }.bind(this));
   }.bind(this));
 };
 
-IndoorReport.prototype.startCapture = function(sensorTag, callback)
+SensortagReport.prototype.startCapture = function(sensorTag, callback)
 {
   async.series([
     function(callback_series) {
       debug('connectAndSetUp');
-      sensorTag.connectAndSetUp(callback_series);
+      timerElapsed = false;
+      timerId = setTimeout(function()
+        {
+          callback_series('Timeout on connectAndSetup');
+        }, SensortagReport.CONNECT_SETUP_MAX_DUR);
+      sensorTag.connectAndSetUp(function()
+        {
+          clearTimeout(timerId);
+          callback_series();
+        });
+    },
+    function(callback_series) {
+      debug('Wait ' + SensortagReport.WAIT_AFTER_CONN_DUR +  'ms after connection');
+      setTimeout(callback_series, SensortagReport.WAIT_AFTER_CONN_DUR);
     },
     function(callback_series) {
       debug('enable humidity and temperature');
@@ -309,11 +337,12 @@ IndoorReport.prototype.startCapture = function(sensorTag, callback)
     }.bind(this),
   ],
     function(err, results){
+      this._sensorTags[sensorTag.uuid].removeAllListeners('disconnect');
       if(err)
       {
         debug(err + ' during start capture');
         if(sensorTag._peripheral.state === 'connected'){                  
-          debug('try to deconnect reporter');
+          debug('try to disconnect reporter');
           sensorTag.disconnect(function(){
             debug('reporter disconnected');
             callback(new Error(err + ' cannot start capture'), sensorTag);
@@ -328,45 +357,45 @@ IndoorReport.prototype.startCapture = function(sensorTag, callback)
       {
         callback(null, sensorTag);
       }
-    });
+    }.bind(this));
 };
 
-IndoorReport.prototype.onHumidityChanged = function(sensorTag, temperature, humidity) {
+SensortagReport.prototype.onHumidityChanged = function(sensorTag, temperature, humidity) {
   debug('\treporter %s - temperature = %d °C', sensorTag.uuid, temperature.toFixed(1));
   debug('\treporter %s - humidity = %d %', sensorTag.uuid, humidity.toFixed(1));
   this.toDb(sensorTag, "temperature", temperature);
   this.toDb(sensorTag, "humidity", humidity);
 };
 
-IndoorReport.prototype.onBarometricPressureChanged = function(sensorTag, pressure) {
+SensortagReport.prototype.onBarometricPressureChanged = function(sensorTag, pressure) {
   debug('\treporter %s - pressure = %d mBar', sensorTag.uuid, pressure.toFixed(1));
   this.toDb(sensorTag, "pressure", pressure);
 };
 
-IndoorReport.prototype.onIrTemperatureChanged = function(sensorTag, objectTemperature, ambientTemperature) {
+SensortagReport.prototype.onIrTemperatureChanged = function(sensorTag, objectTemperature, ambientTemperature) {
   debug('\treporter %s - object temperature = %d °C', sensorTag.uuid, objectTemperature.toFixed(1));
   debug('\treporter %s - ambient temperature = %d °C', sensorTag.uuid, ambientTemperature.toFixed(1));
   this.toDb(sensorTag, "ambient_temperature", ambientTemperature);
 };
 
-IndoorReport.prototype.onLuxometerChanged = function(sensorTag, lux) {
+SensortagReport.prototype.onLuxometerChanged = function(sensorTag, lux) {
   debug('\treporter %s - LUX = %d lux', sensorTag.uuid, lux.toFixed(1));
   this.toDb(sensorTag, "lux", lux);
 };
 
-IndoorReport.prototype.onAccelerometerChanged = function(sensorTag, x, y, z) {
+SensortagReport.prototype.onAccelerometerChanged = function(sensorTag, x, y, z) {
   debug('\treporter %s - ACCEL  (%d, %d, %d)G', sensorTag.uuid, x, y, z);
   this.toDb(sensorTag, "accelX", x);
   this.toDb(sensorTag, "accelY", y);
   this.toDb(sensorTag, "accelZ", z);
 };
 
-IndoorReport.prototype.onBatteryLevelChanged = function(sensorTag, level) {
+SensortagReport.prototype.onBatteryLevelChanged = function(sensorTag, level) {
   debug('\treporter %s - Battery level  %d%', sensorTag.uuid, level);
   this.toDb(sensorTag, "battery", level);
 };
 
-IndoorReport.prototype.toDb = function(sensorTag, fieldName, fieldValue)
+SensortagReport.prototype.toDb = function(sensorTag, fieldName, fieldValue)
 {
   this._dbClient.writeMeasurement(fieldName+ '_TI_ST_' + sensorTag.uuid, [
     {
@@ -380,26 +409,36 @@ IndoorReport.prototype.toDb = function(sensorTag, fieldName, fieldValue)
     })
 };
 
-IndoorReport.prototype.onSensorTagReporterAdded = function(err, sensorTag)
+SensortagReport.prototype.onSensorTagReporterAdded = function(err, sensorTag)
 {
-  if(err)
+  if(sensorTag)
   {
-    debug(err + ' when adding reporter with uuid ' + sensorTag .uuid);
-    if(this._sensorTags[sensorTag.uuid])
-      delete this._sensorTags[sensorTag.uuid];
+    if(err)
+    {
+      debug(err + ' when adding reporter with uuid ' + sensorTag .uuid);
+      if(this._sensorTags[sensorTag.uuid])
+        delete this._sensorTags[sensorTag.uuid];
+    }
+  }
+  else
+  {
+    /** No sensortag added */
+    debug(err + ' when adding a reporter');
   }
   debug('try to discover other reporters');
   setTimeout(function(){
-    indoorReport.addSensortagReporter(this._bindings.onSensorTagReporterAdded);
+    stReport.addSensortagReporter(this._bindings.onSensorTagReporterAdded);
   }.bind(this), 500);
 };
 
-IndoorReport.prototype.onDisconnect = function(sensorTag)
+SensortagReport.prototype.onDisconnect = function(sensorTag)
 {
   debug('reporter ' + sensorTag.uuid + ' disconnected');
+  if(this._sensorTags[sensorTag.uuid])
+    delete this._sensorTags[sensorTag.uuid];
 };
 
-IndoorReport.prototype.close = function(callback){
+SensortagReport.prototype.close = function(callback){
   async.forEach(Object.keys(this._sensorTags), function(uuid, callbackForEach){
     if(this._sensorTags[uuid]._peripheral.state === 'connected'){
       this._sensorTags[uuid].disconnect(callbackForEach);
@@ -420,17 +459,17 @@ IndoorReport.prototype.close = function(callback){
 };
 
 /*****************************************************
- * Indoor report scenario 
+ * Sensortag report scenario 
  * **************************************************/
-debug("starting sensortag indoor report");
+debug("starting sensortag report");
 
-var indoorReport = new IndoorReport();
-indoorReport.init(function(err){
+var stReport = new SensortagReport();
+stReport.init(function(err){
   if(err)
   {
     debug('Unable to init - exit');
     process.exit(2);
   }
-  debug('indoor reported initialized');
-  indoorReport.addSensortagReporter(indoorReport._bindings.onSensorTagReporterAdded);
+  debug('sensortag reported initialized');
+  stReport.addSensortagReporter(stReport._bindings.onSensorTagReporterAdded);
 });
