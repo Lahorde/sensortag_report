@@ -1,1 +1,1 @@
-/home/remi/.wine_installs/win64/drive_c/ti/./tirtos_cc13xx_cc26xx_2_20_01_08/products/tidrivers_cc13xx_cc26xx_2_20_01_10/packages/ti/drivers/rf/RF.h
+/home/remi/dev_tools/ti/tirtos_cc13xx_cc26xx_2_20_01_08/products/tidrivers_cc13xx_cc26xx_2_20_01_10/packages/ti/drivers/rf/RF.h

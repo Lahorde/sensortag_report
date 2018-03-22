@@ -765,11 +765,11 @@
 	<variableList>
 		<variable>
 			<name>BLE_SDK_PATH</name>
-			<value>file:/home/data/remi/.wine_installs/win64/drive_c/ti/simplelink/ble_sdk_2_02_01_18</value>
+			<value>file:/home/remi/dev_tools/ti/simplelink/ble_sdk_2_02_01_18</value>
 		</variable>
 		<variable>
 			<name>CC26XXWARE</name>
-			<value>file:/home/remi/.wine_installs/win64/drive_c/ti/tirtos_cc13xx_cc26xx_2_20_01_08/products/cc26xxware_2_24_02_17393</value>
+			<value>$%7BTI_RTOS_LOC%7D/products/cc26xxware_2_24_02_17393</value>
 		</variable>
 		<variable>
 			<name>ORG_PROJ_DIR</name>
@@ -797,7 +797,7 @@
 		</variable>
 		<variable>
 			<name>TI_RTOS_LOC</name>
-			<value>file:/home/data/remi/.wine_installs/win64/drive_c/ti/tirtos_cc13xx_cc26xx_2_20_01_08</value>
+			<value>file:/home/remi/dev_tools/ti/tirtos_cc13xx_cc26xx_2_20_01_08</value>
 		</variable>
 		<variable>
 			<name>TI_RTOS_LOCAL_LOC</name>
@@ -805,7 +805,7 @@
 		</variable>
 		<variable>
 			<name>TOOLS_BLE</name>
-			<value>$%7BPARENT-5-ORG_PROJ_DIR%7D/tools</value>
+			<value>$%7BBLE_SDK_PATH%7D/tools</value>
 		</variable>
 	</variableList>
 </projectDescription>

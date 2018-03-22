@@ -1,9 +1,25 @@
-var util = require('util');
-var async = require('async');
-var SensorTag = require('sensortag');
-var debug = require('debug')('sensortag_report');
-var Influx = require('influx');
+const util = require('util');
+const async = require('async');
+const SensorTag = require('sensortag');
+const debug = require('debug')('sensortag_report');
+const Influx = require('influx');
 
+/*****************************************************
+ * Promisification
+ * **************************************************/
+function stPromisify(func) {
+  return (...args) =>
+    new Promise((resolve, reject) => {
+      const callback = (data) => resolve(data);
+      func.apply(this, [...args, callback]);
+    })
+}
+
+function after(dur){
+  return new Promise((resolve, reject) => {
+    setTimeout(resolve, dur);
+  });
+}
 /*****************************************************
  * Program parameters
  * **************************************************/
@@ -20,6 +36,11 @@ if(process.env.DB_USER){
 else{
   console.log('ERROR : DB_USER variable must be set');
   process.exit(1);
+}
+
+var db_host = "localhost";
+if(process.env.DB_HOST){
+  db_host = process.env.DB_HOST;
 }
 
 if(process.env.DB_PASS){
@@ -42,9 +63,12 @@ function exitHandler(options, err) {
   process.removeAllListeners('SIGINT');
   debug('exiting reporter...');
   if (options.cleanup){
-    stReport.close(function(err){
+    stReport.close()
+    .catch((err) => {
+      debug(err.stack);
+    })
+    .then(() => {
       debug('sensortag  reporter closed');
-      if (err) debug(err.stack);
       if (options.exit) process.exit();
     });
   }
@@ -89,106 +113,83 @@ SensorTag.CC2650.prototype.writePeriodCharacteristic = function(serviceUuid, cha
 };
 
 
-/*****************************************************
- * SensortagReport Class 
- * **************************************************/
-function SensortagReport(callback)
-{
-  this._sensorTags = {};
-
-  this._bindings = {};
-  this._bindings.onSensorTagReporterAdded = this.onSensorTagReporterAdded.bind(this);
-
-  this._dbClient = new Influx.InfluxDB({
-
-    //single-host configuration 
-    host : 'localhost',
-    port : 8086, // optional, default 8086 
-    protocol : 'http', // optional, default 'http' 
-    database : db,
-    username : db_user,
-    password : db_pass
-  });
-}
-
 /***************/
 /** CONSTANTS  */
 /***************/
 /** Max connect/setup duration in ms - After many reconnections, it takes some 10s to connect, TODO : investigate it using packet sniffer*/
-SensortagReport.CONNECT_SETUP_MAX_DUR = 30000;
+const CONNECT_SETUP_MAX_DUR = 40000;
 /** After a successful connection, some ms */
-SensortagReport.WAIT_AFTER_CONN_DUR    = 1500;
-SensortagReport.CONNECT_CONFIG_MAX_DUR = SensortagReport.CONNECT_SETUP_MAX_DUR + SensortagReport.WAIT_AFTER_CONN_DUR + 2000;
+const WAIT_AFTER_CONN_DUR    = 1500;
+const CONNECT_CONFIG_MAX_DUR = CONNECT_SETUP_MAX_DUR + WAIT_AFTER_CONN_DUR + 2000;
 
 
-SensortagReport.prototype.init = function(callback)
-{
-  var nbConnectTries = 10;
+/*****************************************************
+ * SensortagReport Class 
+ * **************************************************/
+class SensortagReport {
 
-  debug("create db");
-  /** check db connection & existence */
-  this._dbClient.getDatabaseNames()
-    .then(dbNames => {
-      this.createDb(dbNames, callback);
-    })
-    .catch(err => {
-      debug(err + ' unable to get db names - try ' + nbConnectTries + ' times');
-      var timer = setInterval(function(){
-        this._dbClient.getDatabaseNames()
-          .then(dbNames => {
-            clearInterval(timer);
-            this.createDb(dbNames, callback);
-          })
-          .catch(err => {
-            nbConnectTries--;
-            if(nbConnectTries === 0)
-            {  
-              clearInterval(timer);
-              debug(err + ' - could not connect to db');
-              callback(new Error(err + ' - could not check db connection or db existence'));
-            }
-            else
-            {
-              debug(err + ' unable to get db names - try ' + nbConnectTries + ' times');
-            }
-          })
-      }.bind(this), 2000);
-    })
-};
+  constructor(){
+    this._sensorTags = {};
 
-SensortagReport.prototype.createDb = function(dbNames, callback)
-{
-  if(dbNames.indexOf(db) == -1)
-  {
-    this._dbClient.createDatabase(db, function(err, result) {
-      if(err)
-      {
-        debug(err + ' when creating db ' + db);
-      }
-      callback(err); 
+    this._bindings = {};
+
+    this._dbClient = new Influx.InfluxDB({
+
+      //single-host configuration 
+      host : db_host,
+      port : 8086, // optional, default 8086 
+      protocol : 'http', // optional, default 'http' 
+      database : db,
+      username : db_user,
+      password : db_pass
     });
   }
-  else
-  {
-    callback();
+
+  async init(){
+    return this.openDb(db);
   }
-};
 
-SensortagReport.prototype.addSensortagReporter = function(callback)
-{
-  debug('try to discover some reporters') 
-  SensorTag.discover(function(sensorTag) {
-    debug('discovered: ' + sensorTag);
-    if(this._sensorTags[sensorTag.uuid] !== undefined)
-    {
-      return callback('tag ' + sensorTag.uuid + ' already handled');
-    }
-    else
-    {
-    }
 
-    this._sensorTags[sensorTag.uuid] = sensorTag;
+  async openDb(dbName){
+    const NB_CONNECT_TRIES = 2;
+    return this.createDb(dbName)
+      .catch(err => {
+        this._nbConnectTries++;
+        if(this._nbConnectTries >= NB_CONNECT_TRIES){
+          throw new Error("could not create db " + dbName + " err - " + err);
+        }
+        else{
+          debug("unable to create db - try " + (NB_CONNECT_TRIES - this._nbConnectTries) + " time(s) again - " + err);
+          return after(2000)
+            .then(() => {
+              return this.openDb(dbName);
+            })
+        }
+      })
+  }
 
+
+  async createDb(dbName){
+    debug("create db : " + dbName);
+    /** check db connection & existence */
+    return this._dbClient.getDatabaseNames()
+      .then((dbNames) => {
+        debug("got db names");
+        if(dbNames.indexOf(dbName) == -1){
+          debug("db " + dbName + " does not exist - create it");
+          return this._dbClient.createDatabase(dbName)
+            .catch(err => {
+              debug(err + " when creating db " + dbName);
+              throw err;
+            })
+        }
+        else{
+          debug("db " + dbName + " exists");
+        }
+      })
+  }
+
+  _setBindings(sensorTag){
     this._sensorTags[sensorTag.uuid]._bindings = {};
     this._sensorTags[sensorTag.uuid]._bindings.onHumidityChanged = this.onHumidityChanged.bind(this, this._sensorTags[sensorTag.uuid]);
     this._sensorTags[sensorTag.uuid]._bindings.onBarometricPressureChanged = this.onBarometricPressureChanged.bind(this, this._sensorTags[sensorTag.uuid]);
@@ -204,271 +205,288 @@ SensortagReport.prototype.addSensortagReporter = function(callback)
     this._sensorTags[sensorTag.uuid].on('luxometerChange', this._sensorTags[sensorTag.uuid]._bindings.onLuxometerChanged);
     this._sensorTags[sensorTag.uuid].on('accelerometerChange', this._sensorTags[sensorTag.uuid]._bindings.onAccelerometerChanged);
     this._sensorTags[sensorTag.uuid].on('batteryLevelChange', this._sensorTags[sensorTag.uuid]._bindings.onBatteryLevelChanged);
+  }
 
-    /** Timeout to detect failing reporter adding, in some cases, when peripheral disconnects, no disconnect 
-     * event is sent. So a timeout is needed during this process */
-    var timerId = setTimeout(function()
-      {
-        /** clear disconnect listeners, if not reporter adding disconnect callback can be called later */   
-        this._sensorTags[sensorTag.uuid].removeAllListeners('disconnect');
-        if(sensorTag._peripheral.state === 'connected'){                  
-          debug('try to disconnect reporter');
-          sensorTag.disconnect(function(){
-            debug('reporter disconnected');
-            callback('reporter ' + sensorTag.uuid + ' timeout during preparation for capture', sensorTag);
-          });
+  async addSensortagReporters(){
+    return this.addSensortagReporter()
+    .then(() => {
+      debug("added reporter - try to add some other sensortag reporters");
+      return;
+    })
+    .catch((err) => {
+      debug("err when adding reporters - " + err);
+      debug("try to add some other sensortag reporters");
+      return;
+    })
+    .then(() => {
+      after(500);
+    })
+    .then(() => {
+      return this.addSensortagReporters();
+    });
+  }
+
+  async addSensortagReporter(){
+    debug('try to discover some reporters');
+    return stPromisify(SensorTag.discover)()
+      .then((sensorTag) => {
+        debug('discovered: ' + sensorTag);
+        if(this._sensorTags[sensorTag.uuid] !== undefined){
+          throw new Error('tag ' + sensorTag.uuid + ' already handled');
         }
-        else
-        {
-          callback('reporter ' + sensorTag.uuid + ' timeout during preparation for capture', sensorTag);
+        else{
+          this._sensorTags[sensorTag.uuid] = sensorTag;
+          this._setBindings(sensorTag);
+
+          /** Timeout to detect failing reporter adding, in some cases, when peripheral disconnects, no disconnect 
+           * event is sent. So a timeout is needed during this process */
+          var timerId;
+          return new Promise((resolve, reject) => {
+            timerId = setTimeout(() => {
+              /** clear disconnect listeners, if not reporter adding disconnect callback can be called later */   
+              this._sensorTags[sensorTag.uuid].removeAllListeners('disconnect');
+              if(sensorTag._peripheral.state === 'connected'){                  
+                debug('try to disconnect reporter');
+                sensorTag.disconnect(() => {
+                  debug('reporter disconnected');
+                  reject('reporter ' + sensorTag.uuid + ' timeout during preparation for capture', sensorTag);
+                });
+              }
+              else{
+                reject('reporter ' + sensorTag.uuid + ' timeout during preparation for capture', sensorTag);
+              }
+            }, CONNECT_CONFIG_MAX_DUR);
+
+            /** If tag disconnected during adding => exit */
+            this._sensorTags[sensorTag.uuid].on('disconnect', () => {
+              clearTimeout(timerId);
+              this._sensorTags[sensorTag.uuid].removeAllListeners('disconnect');
+              reject('tag ' + sensorTag.uuid + ' disconnected during preparation for capture', sensorTag);
+            });
+
+            this.startCapture(this._sensorTags[sensorTag.uuid])
+            .then(() => {
+              clearTimeout(timerId);
+              this._sensorTags[sensorTag.uuid].removeAllListeners('disconnect');
+              this._sensorTags[sensorTag.uuid].on('disconnect', this._sensorTags[sensorTag.uuid]._bindings.onDisconnect);
+              resolve();
+            })
+          })
+          .catch((err) => {
+            debug(err + ' when adding reporter with uuid ' + sensorTag .uuid);
+            clearTimeout(timerId);
+            if(this._sensorTags[sensorTag.uuid])
+              delete this._sensorTags[sensorTag.uuid];
+            return err; 
+          })
         }
-      }.bind(this), SensortagReport.CONNECT_CONFIG_MAX_DUR);
+      })
+  }
 
-    /** If tag disconnected during adding => exit */
-    this._sensorTags[sensorTag.uuid].on('disconnect', function(){
-      clearTimeout(timerId);
-      this._sensorTags[sensorTag.uuid].removeAllListeners('disconnect');
-      callback('tag ' + sensorTag.uuid + ' disconnected during preparation for capture', sensorTag);
-    }.bind(this));
 
-    this.startCapture(this._sensorTags[sensorTag.uuid], function(err){
-      clearTimeout(timerId);
-      this._sensorTags[sensorTag.uuid].on('disconnect', this._sensorTags[sensorTag.uuid]._bindings.onDisconnect);
-      callback(err, sensorTag);
-    }.bind(this));
-  }.bind(this));
-};
-
-SensortagReport.prototype.startCapture = function(sensorTag, callback)
-{
-  async.series([
-    function(callback_series) {
+  async startCapture(sensorTag){
+    return new Promise((resolve, reject) => {
       debug('connectAndSetUp');
-      timerElapsed = false;
-      timerId = setTimeout(function()
-        {
-          callback_series('Timeout on connectAndSetup');
-        }, SensortagReport.CONNECT_SETUP_MAX_DUR);
-      sensorTag.connectAndSetUp(function()
-        {
+      var timerId = setTimeout(() => {
+          reject('Timeout on connectAndSetup');
+      }, CONNECT_SETUP_MAX_DUR);
+      sensorTag.connectAndSetUp(() => {
           clearTimeout(timerId);
-          callback_series();
-        });
-    },
-    function(callback_series) {
-      debug('Wait ' + SensortagReport.WAIT_AFTER_CONN_DUR +  'ms after connection');
-      setTimeout(callback_series, SensortagReport.WAIT_AFTER_CONN_DUR);
-    },
-    function(callback_series) {
+          resolve();
+      });
+    })
+    .then(() => {
+      debug('Wait ' + WAIT_AFTER_CONN_DUR +  'ms after connection');
+      setTimeout(() => {return}, WAIT_AFTER_CONN_DUR);
+    })
+    .then(() => {
       debug('enable humidity and temperature');
-      sensorTag.enableHumidity(callback_series);
-    },
-    function(callback_series) {
+      debug(sensorTag.uuid);
+      debug(sensorTag.enableHumidity.toString());
+      return stPromisify(sensorTag.enableHumidity.bind(sensorTag))();
+    })
+    .then(() => {
       debug('set humidity and temperature period');
-      sensorTag.setHumidityPeriod(5, callback_series);
-    },              
-    function(callback_series) {
+      return stPromisify(sensorTag.setHumidityPeriod.bind(sensorTag))(30);
+    })
+    .then(() => {
       debug('notify humidity and temperature');
-      sensorTag.notifyHumidity(callback_series);
-    },
-    function(callback_series) {
+      return stPromisify(sensorTag.notifyHumidity.bind(sensorTag))();
+    })
+    .then(() => {
       debug('enable barometric pressure');
-      sensorTag.enableBarometricPressure(callback_series);
-    },
-    function(callback_series) {
+      return stPromisify(sensorTag.enableBarometricPressure.bind(sensorTag))();
+    })
+    .then(() => {
       debug('set barometric pressure period');
-      sensorTag.setBarometricPressurePeriod(120, callback_series);
-    },
-    function(callback_series) {
+      return stPromisify(sensorTag.setBarometricPressurePeriod.bind(sensorTag))(60*15);
+    })
+    .then(() => {
       debug('notify barometric pressure');
-      sensorTag.notifyBarometricPressure(callback_series);
-    },
-    function(callback_series) {
-      debug('enable ambient temperature');
-      sensorTag.enableIrTemperature(callback_series);
-    },
-    function(callback_series) {
-      debug('set ambient temperature period');
-      sensorTag.setIrTemperaturePeriod(20, callback_series);
-    },
-    function(callback_series) {
-      debug('notify ambient temperature');
-      sensorTag.notifyIrTemperature(callback_series);
-    },
-    function(callback_series) {
+      return stPromisify(sensorTag.notifyBarometricPressure.bind(sensorTag))();
+    })
+    //.then(() => {
+    //  debug('enable ambient temperature');
+    //  return stPromisify(sensorTag.enableIrTemperature.bind(sensorTag))();
+    //})
+    //.then(() => {
+    //  debug('set ambient temperature period');
+    //  return stPromisify(sensorTag.setIrTemperaturePeriod.bind(sensorTag))(30);
+    //})
+    //.then(() => {
+    //  debug('notify ambient temperature');
+    //  return stPromisify(sensorTag.notifyIrTemperature.bind(sensorTag))();
+    //})
+    .then(() => {
       debug('enable luxometer');
-      sensorTag.enableLuxometer(callback_series);
-    },
-    function(callback_series) {
+      return stPromisify(sensorTag.enableLuxometer.bind(sensorTag))();
+    })
+    .then(() => {
       debug('set luxometer period');
-      sensorTag.setLuxometerPeriod(5, callback_series);
-    },
-    function(callback_series) {
+      return stPromisify(sensorTag.setLuxometerPeriod.bind(sensorTag))(10);
+    })
+    .then(() => {
       debug('notify luxometer');
-      sensorTag.notifyLuxometer(callback_series);
-    },
-    function(callback_series) {
-      debug('enable wom');
-      sensorTag.enableWOM(callback_series);
-    },
-    function(callback_series) {
-      debug('enable accelerometer');
-      sensorTag.enableAccelerometer(callback_series);
-    },
-    function(callback_series) {
-      debug('set accelerometer period');
-      sensorTag.setAccelerometerPeriod(2, callback_series);
-    },
-    function(callback_series) {
-      debug('notify luxometer');
-      sensorTag.notifyAccelerometer(callback_series);
-    },
-    function(callback_series) {
+      return stPromisify(sensorTag.notifyLuxometer.bind(sensorTag))();
+    })
+    //.then(() => {
+    //  debug('enable wom');
+    //  return stPromisify(sensorTag.enableWOM.bind(sensorTag))();
+    //})
+    //.then(() => {
+    //  debug('enable accelerometer');
+    //  return stPromisify(sensorTag.enableAccelerometer.bind(sensorTag))();
+    //})
+    //.then(() => {
+    //  debug('set accelerometer period');
+    //  return stPromisify(sensorTag.setAccelerometerPeriod.bind(sensorTag))(2);
+    //})
+    .then(() => {
+      debug('notify accelerometer');
+      return stPromisify(sensorTag.notifyAccelerometer.bind(sensorTag))();
+    })
+    .then(() => {
       debug('read battery level');
-      sensorTag.readBatteryLevel(function(err, level){
-        if(!err)
-          this.onBatteryLevelChanged(sensorTag, level);
-        callback_series(err);
-      }.bind(this));
-    }.bind(this),
-    function(callback_series) {
+      return stPromisify(sensorTag.readBatteryLevel.bind(sensorTag))()
+    })
+    .then((level) => {
+      this.onBatteryLevelChanged(sensorTag, level);
       debug('notify battery level');
-      sensorTag.notifyBatteryLevel(callback_series);
-    }.bind(this),
-  ],
-    function(err, results){
+      return stPromisify(sensorTag.notifyBatteryLevel.bind(sensorTag))();
+    })
+    .catch((err) => {
       this._sensorTags[sensorTag.uuid].removeAllListeners('disconnect');
-      if(err)
-      {
-        debug(err + ' during start capture');
-        if(sensorTag._peripheral.state === 'connected'){                  
-          debug('try to disconnect reporter');
-          sensorTag.disconnect(function(){
-            debug('reporter disconnected');
-            callback(new Error(err + ' cannot start capture'), sensorTag);
-          });
-        }
-        else
-        {
-          callback(new Error(err + ' cannot start capture'), sensorTag);
-        }
+      debug(err + ' during start capture');
+      if(sensorTag._peripheral.state === 'connected'){                  
+        debug('try to disconnect reporter');
+        return stPromisify(sensorTag.disconnect.bind(sensorTag))()
+        .then(() => {
+          debug("reporter disconnected");
+          return;
+        })
+        .catch((err) => {
+          debug("could not disconnect reporter");
+          return;
+        })
+        .then(() => {
+          throw new Error(err + ' cannot start capture ' + err.stack);
+        });
       }
       else
       {
-        callback(null, sensorTag);
+        throw (new Error(err + ' cannot start capture' + err.stack));
       }
-    }.bind(this));
-};
-
-SensortagReport.prototype.onHumidityChanged = function(sensorTag, temperature, humidity) {
-  debug('\treporter %s - temperature = %d °C', sensorTag.uuid, temperature.toFixed(1));
-  debug('\treporter %s - humidity = %d %', sensorTag.uuid, humidity.toFixed(1));
-  this.toDb(sensorTag, "temperature", temperature);
-  this.toDb(sensorTag, "humidity", humidity);
-};
-
-SensortagReport.prototype.onBarometricPressureChanged = function(sensorTag, pressure) {
-  debug('\treporter %s - pressure = %d mBar', sensorTag.uuid, pressure.toFixed(1));
-  this.toDb(sensorTag, "pressure", pressure);
-};
-
-SensortagReport.prototype.onIrTemperatureChanged = function(sensorTag, objectTemperature, ambientTemperature) {
-  debug('\treporter %s - object temperature = %d °C', sensorTag.uuid, objectTemperature.toFixed(1));
-  debug('\treporter %s - ambient temperature = %d °C', sensorTag.uuid, ambientTemperature.toFixed(1));
-  this.toDb(sensorTag, "ambient_temperature", ambientTemperature);
-};
-
-SensortagReport.prototype.onLuxometerChanged = function(sensorTag, lux) {
-  debug('\treporter %s - LUX = %d lux', sensorTag.uuid, lux.toFixed(1));
-  this.toDb(sensorTag, "lux", lux);
-};
-
-SensortagReport.prototype.onAccelerometerChanged = function(sensorTag, x, y, z) {
-  debug('\treporter %s - ACCEL  (%d, %d, %d)G', sensorTag.uuid, x, y, z);
-  this.toDb(sensorTag, "accelX", x);
-  this.toDb(sensorTag, "accelY", y);
-  this.toDb(sensorTag, "accelZ", z);
-};
-
-SensortagReport.prototype.onBatteryLevelChanged = function(sensorTag, level) {
-  debug('\treporter %s - Battery level  %d%', sensorTag.uuid, level);
-  this.toDb(sensorTag, "battery", level);
-};
-
-SensortagReport.prototype.toDb = function(sensorTag, fieldName, fieldValue)
-{
-  this._dbClient.writeMeasurement(fieldName+ '_TI_ST_' + sensorTag.uuid, [
-    {
-      fields : {
-        value: fieldValue
-      }
-    }
-  ])
-    .catch(err => {
-      debug("Cannot write to db : " + err);
     })
-};
-
-SensortagReport.prototype.onSensorTagReporterAdded = function(err, sensorTag)
-{
-  if(sensorTag)
-  {
-    if(err)
-    {
-      debug(err + ' when adding reporter with uuid ' + sensorTag .uuid);
-      if(this._sensorTags[sensorTag.uuid])
-        delete this._sensorTags[sensorTag.uuid];
-    }
   }
-  else
-  {
-    /** No sensortag added */
-    debug(err + ' when adding a reporter');
+
+
+  onHumidityChanged(sensorTag, temperature, humidity) {
+    debug('\treporter %s - temperature = %d °C', sensorTag.uuid, temperature.toFixed(1));
+    debug('\treporter %s - humidity = %d %', sensorTag.uuid, humidity.toFixed(1));
+    this.toDb(sensorTag, "temperature", temperature);
+    this.toDb(sensorTag, "humidity", humidity);
   }
-  setTimeout(function(){
-    stReport.addSensortagReporter(this._bindings.onSensorTagReporterAdded);
-  }.bind(this), 500);
-};
 
-SensortagReport.prototype.onDisconnect = function(sensorTag)
-{
-  debug('reporter ' + sensorTag.uuid + ' disconnected');
-  if(this._sensorTags[sensorTag.uuid])
-    delete this._sensorTags[sensorTag.uuid];
-};
+  onBarometricPressureChanged(sensorTag, pressure) {
+    debug('\treporter %s - pressure = %d mBar', sensorTag.uuid, pressure.toFixed(1));
+    this.toDb(sensorTag, "pressure", pressure);
+  }
 
-SensortagReport.prototype.close = function(callback){
-  async.forEach(Object.keys(this._sensorTags), function(uuid, callbackForEach){
-    if(this._sensorTags[uuid]._peripheral.state === 'connected'){
-      this._sensorTags[uuid].disconnect(callbackForEach);
-    }
-    else{
-      callbackForEach();
-    }
-  }.bind(this), function(err){
-    this._sensorTags = [];
-    if(err){
-      debug('some reporter have not been disconnected');
-    }
-    else{
-      debug('all reporters have been disconnected');
-    }
-    callback(err);
-  }.bind(this));
-};
+  onIrTemperatureChanged(sensorTag, objectTemperature, ambientTemperature) {
+    debug('\treporter %s - object temperature = %d °C', sensorTag.uuid, objectTemperature.toFixed(1));
+    debug('\treporter %s - ambient temperature = %d °C', sensorTag.uuid, ambientTemperature.toFixed(1));
+    this.toDb(sensorTag, "ambient_temperature", ambientTemperature);
+  }
+
+  onLuxometerChanged(sensorTag, lux) {
+    debug('\treporter %s - LUX = %d lux', sensorTag.uuid, lux.toFixed(1));
+    this.toDb(sensorTag, "lux", lux);
+  }
+
+  onAccelerometerChanged(sensorTag, x, y, z) {
+    debug('\treporter %s - ACCEL  (%d, %d, %d)G', sensorTag.uuid, x, y, z);
+    this.toDb(sensorTag, "accelX", x);
+    this.toDb(sensorTag, "accelY", y);
+    this.toDb(sensorTag, "accelZ", z);
+  }
+
+  onBatteryLevelChanged(sensorTag, level) {
+    debug('\treporter %s - Battery level  %d%', sensorTag.uuid, level);
+    this.toDb(sensorTag, "battery", level);
+  }
+
+  toDb(sensorTag, fieldName, fieldValue)
+  {
+    this._dbClient.writeMeasurement(fieldName+ '_TI_ST_' + sensorTag.uuid, [
+      {
+        fields : {
+          value: fieldValue
+        }
+      }
+    ])
+      .catch(err => {
+        debug("Cannot write to db : " + err);
+      })
+  }
+
+
+  onDisconnect(sensorTag){
+    debug('reporter ' + sensorTag.uuid + ' disconnected');
+    if(this._sensorTags[sensorTag.uuid])
+      delete this._sensorTags[sensorTag.uuid];
+  }
+
+  async close(){
+    var promises = [];
+    return new Promise((resolve, reject) => { 
+      for(uuid in this.sensorTags){
+        if(this._sensorTags[uuid]._peripheral.state === 'connected'){
+          promises.push(stPromisify(this._sensorTags[uuid].disconnect)());
+        }
+      }
+      Promise.all(promises)
+      .catch((err) => {
+        debug("could not disconnect sensortag '" + uuid + "' " + err);
+        reject()
+      })
+      .then(() => {
+        resolve();
+      })
+    });
+  }
+}
 
 /*****************************************************
  * Sensortag report scenario 
  * **************************************************/
-debug("%c starting sensortag report", 'green');
+debug("starting sensortag report");
 
 var stReport = new SensortagReport();
-stReport.init(function(err){
-  if(err)
-  {
-    debug('Unable to init - exit');
-    process.exit(2);
-  }
-  debug('sensortag reporter initialized');
-  stReport.addSensortagReporter(stReport._bindings.onSensorTagReporterAdded);
+stReport.init()
+.then(() => {
+  return stReport.addSensortagReporters();
+})
+.catch((err) => {
+  debug("should never be here" + err.stack);
+  exitHandler({cleanup : true, exit : true}, null);
 });

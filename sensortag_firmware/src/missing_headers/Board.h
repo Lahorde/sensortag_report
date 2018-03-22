@@ -1,1 +1,1 @@
-/home/data/remi/Projects/cc2650/sensortag_ble_sdk_2_02_01_18/sensortag/src/target/board.h
+/home/remi/dev_tools/ti/simplelink/ble_sdk_2_02_01_18/src/target/board.h
