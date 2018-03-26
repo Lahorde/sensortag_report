@@ -367,7 +367,7 @@ class SensortagReport {
     })
     .then(() => {
       debug('read battery level');
-      return stPromisify(sensorTag.readBatteryLevel.bind(sensorTag))()
+      return util.promisify(sensorTag.readBatteryLevel.bind(sensorTag))()
     })
     .then((level) => {
       this.onBatteryLevelChanged(sensorTag, level);

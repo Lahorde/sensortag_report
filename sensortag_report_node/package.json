@@ -7,9 +7,9 @@
   "license": "",
   "readmeFilename": "README.md",
   "dependencies": {
-    "sensortag" : "https://github.com/lahorde/node-sensortag.git", 
-    "influx":"*",
-    "async":"*",
-    "debug":"*"
+    "sensortag": "https://github.com/lahorde/node-sensortag.git",
+    "influx": "*",
+    "async": "*",
+    "debug": "*"
   }
 }
