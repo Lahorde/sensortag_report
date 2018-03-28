@@ -117,7 +117,7 @@ SensorTag.CC2650.prototype.writePeriodCharacteristic = function(serviceUuid, cha
 /** CONSTANTS  */
 /***************/
 /** Max connect/setup duration in ms - After many reconnections, it takes some 10s to connect, TODO : investigate it using packet sniffer*/
-const CONNECT_SETUP_MAX_DUR = 40000;
+const CONNECT_SETUP_MAX_DUR = 30000;
 /** After a successful connection, some ms */
 const WAIT_AFTER_CONN_DUR    = 1500;
 const CONNECT_CONFIG_MAX_DUR = CONNECT_SETUP_MAX_DUR + WAIT_AFTER_CONN_DUR + 2000;
@@ -219,7 +219,7 @@ class SensortagReport {
       return;
     })
     .then(() => {
-      after(500);
+      after(2500);
     })
     .then(() => {
       return this.addSensortagReporters();
@@ -257,34 +257,49 @@ class SensortagReport {
               }
             }, CONNECT_CONFIG_MAX_DUR);
 
+            var disconnectErr = null;
+            var checkDisconnection = function(){
+              if(disconnectErr){
+                var tmp = disconnectErr;
+                disconnectErr = null;
+                throw(tmp);
+              }
+              else{
+                return;
+              }
+            }
+
             /** If tag disconnected during adding => exit */
             this._sensorTags[sensorTag.uuid].on('disconnect', () => {
               clearTimeout(timerId);
               this._sensorTags[sensorTag.uuid].removeAllListeners('disconnect');
-              reject('tag ' + sensorTag.uuid + ' disconnected during preparation for capture', sensorTag);
+              disconnectErr = 'tag ' + sensorTag.uuid + ' disconnected during preparation for capture';
             });
 
-            this.startCapture(this._sensorTags[sensorTag.uuid])
+            this.startCapture(this._sensorTags[sensorTag.uuid], checkDisconnection)
             .then(() => {
               clearTimeout(timerId);
               this._sensorTags[sensorTag.uuid].removeAllListeners('disconnect');
               this._sensorTags[sensorTag.uuid].on('disconnect', this._sensorTags[sensorTag.uuid]._bindings.onDisconnect);
               resolve();
             })
+            .catch((err) => {
+              reject(err);
+            })
           })
           .catch((err) => {
-            debug(err + ' when adding reporter with uuid ' + sensorTag .uuid);
-            clearTimeout(timerId);
-            if(this._sensorTags[sensorTag.uuid])
-              delete this._sensorTags[sensorTag.uuid];
-            return err; 
+              debug(err + ' when adding reporter with uuid ' + sensorTag .uuid);
+              clearTimeout(timerId);
+              if(this._sensorTags[sensorTag.uuid])
+                delete this._sensorTags[sensorTag.uuid];
+              throw err;
           })
         }
       })
   }
 
 
-  async startCapture(sensorTag){
+  async startCapture(sensorTag, checkFunc){
     return new Promise((resolve, reject) => {
       debug('connectAndSetUp');
       var timerId = setTimeout(() => {
@@ -296,87 +311,105 @@ class SensortagReport {
       });
     })
     .then(() => {
+      checkFunc();
       debug('Wait ' + WAIT_AFTER_CONN_DUR +  'ms after connection');
       setTimeout(() => {return}, WAIT_AFTER_CONN_DUR);
     })
     .then(() => {
+      checkFunc();
       debug('enable humidity and temperature');
       debug(sensorTag.uuid);
       debug(sensorTag.enableHumidity.toString());
       return stPromisify(sensorTag.enableHumidity.bind(sensorTag))();
     })
     .then(() => {
+      checkFunc();
       debug('set humidity and temperature period');
       return stPromisify(sensorTag.setHumidityPeriod.bind(sensorTag))(30);
     })
     .then(() => {
+      checkFunc();
       debug('notify humidity and temperature');
       return stPromisify(sensorTag.notifyHumidity.bind(sensorTag))();
     })
     .then(() => {
+      checkFunc();
       debug('enable barometric pressure');
       return stPromisify(sensorTag.enableBarometricPressure.bind(sensorTag))();
     })
     .then(() => {
+      checkFunc();
       debug('set barometric pressure period');
       return stPromisify(sensorTag.setBarometricPressurePeriod.bind(sensorTag))(60*15);
     })
     .then(() => {
+      checkFunc();
       debug('notify barometric pressure');
       return stPromisify(sensorTag.notifyBarometricPressure.bind(sensorTag))();
     })
     //.then(() => {
+    //  checkFunc();
     //  debug('enable ambient temperature');
     //  return stPromisify(sensorTag.enableIrTemperature.bind(sensorTag))();
     //})
     //.then(() => {
+    //  checkFunc();
     //  debug('set ambient temperature period');
     //  return stPromisify(sensorTag.setIrTemperaturePeriod.bind(sensorTag))(30);
     //})
     //.then(() => {
+    //  checkFunc();
     //  debug('notify ambient temperature');
     //  return stPromisify(sensorTag.notifyIrTemperature.bind(sensorTag))();
     //})
     .then(() => {
+      checkFunc();
       debug('enable luxometer');
       return stPromisify(sensorTag.enableLuxometer.bind(sensorTag))();
     })
     .then(() => {
+      checkFunc();
       debug('set luxometer period');
       return stPromisify(sensorTag.setLuxometerPeriod.bind(sensorTag))(10);
     })
     .then(() => {
+      checkFunc();
       debug('notify luxometer');
       return stPromisify(sensorTag.notifyLuxometer.bind(sensorTag))();
     })
     //.then(() => {
+    //  checkFunc();
     //  debug('enable wom');
     //  return stPromisify(sensorTag.enableWOM.bind(sensorTag))();
     //})
     //.then(() => {
+    //  checkFunc();
     //  debug('enable accelerometer');
     //  return stPromisify(sensorTag.enableAccelerometer.bind(sensorTag))();
     //})
     //.then(() => {
+    //  checkFunc();
     //  debug('set accelerometer period');
     //  return stPromisify(sensorTag.setAccelerometerPeriod.bind(sensorTag))(2);
     //})
     .then(() => {
+      checkFunc();
       debug('notify accelerometer');
       return stPromisify(sensorTag.notifyAccelerometer.bind(sensorTag))();
     })
     .then(() => {
+      checkFunc();
       debug('read battery level');
       return util.promisify(sensorTag.readBatteryLevel.bind(sensorTag))()
     })
     .then((level) => {
+      checkFunc();
       this.onBatteryLevelChanged(sensorTag, level);
       debug('notify battery level');
       return stPromisify(sensorTag.notifyBatteryLevel.bind(sensorTag))();
     })
     .catch((err) => {
       this._sensorTags[sensorTag.uuid].removeAllListeners('disconnect');
-      debug(err + ' during start capture');
       if(sensorTag._peripheral.state === 'connected'){                  
         debug('try to disconnect reporter');
         return stPromisify(sensorTag.disconnect.bind(sensorTag))()
@@ -389,12 +422,12 @@ class SensortagReport {
           return;
         })
         .then(() => {
-          throw new Error(err + ' cannot start capture ' + err.stack);
+          throw new Error(err + ' cannot start capture ');
         });
       }
       else
       {
-        throw (new Error(err + ' cannot start capture' + err.stack));
+        throw new Error(err + ' cannot start capture');
       }
     })
   }
